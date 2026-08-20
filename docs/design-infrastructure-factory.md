@@ -219,6 +219,9 @@ instance (t4g-class) running the same compose files as Vincent's backend.
 - **The test plane keeps the TTL reaper** — instances there are measured in
   hours by design, and the reaper terminates rather than stops.
 
+**Concrete values, set by OQ-7:** a new standalone account in
+**ap-southeast-2**; warning budget **USD 25**, ceiling budget **USD 75**.
+
 ### DD-14 — Targets install via arc at an exact ref, and every install can fail on drift
 **Decision:** layer 3 (the software under test) is installed by arc:
 
@@ -475,8 +478,11 @@ found six times).
 
 - Dedicated account; credentials never in the repo; sops stays on the
   reference side, IAM/SSM parameters on the AWS side.
-- No public ingress to the test plane: SSH restricted to the operator's
-  address, or SSM Session Manager (OQ-6).
+- **Zero inbound to the test plane.** No security group opens port 22 to
+  anything, including the operator's own address; access is SSM Session
+  Manager only, and Ansible rides SSH-through-SSM (DD-19, resolving OQ-6).
+  Standalone-account posture means the tag-scoped IAM policy carries this
+  alone, with no SCP behind it (OQ-7).
 - This repo's confidentiality gate applies to every artifact the factory
   emits: receipts and fingerprints carry no live platform IDs, no real
   hostnames outside the test plane's own ephemeral names, placeholders in
@@ -505,10 +511,36 @@ found six times).
 SSH-through-SSM so nothing above the seam changes. (Was: SSH restricted by
 security group.)
 
-**OQ-7 — Which account and region?** Needs Andreas and JC. Region trades
-operator latency (ap-southeast-2) against instance-family breadth
-(us-east-1). *Recommendation: decide with the budget alarm, as one
-decision.*
+**OQ-7 — resolved.** The factory runs in a **new standalone AWS account**
+in **ap-southeast-2 (Sydney)**, with a **USD 25 warning budget and a USD 75
+ceiling budget** — two independent budgets per DD-13, each firing at 100% of
+its own limit.
+
+- **Region.** Latency wins over instance-family breadth because DD-19 puts
+  every Ansible task through an SSM tunnel, so the round trip is paid per
+  task, not once; and the persistent Grafana is read by a human in Auckland.
+  ap-southeast-2 carries the Graviton families DD-18's ARM tier needs
+  (t4g for the persistent plane, c7g/m7g for test-plane ARM), which is the
+  only breadth requirement the spec actually names. ap-southeast-6
+  (Auckland) was considered and rejected for now: lower latency still, but
+  neither its availability nor its instance-family breadth was verified, and
+  a young region is the wrong place to discover a missing family mid-phase.
+  Revisit once Phase 2 is green.
+- **Account.** Standalone, not an Organization member — DD-13 requires only
+  that it never be an existing work or personal account, and a standalone
+  account is the shortest path to that. The cost is named: there is **no SCP
+  backstop**, so the `managed = assay-factory` tag-scoped IAM policy
+  (DD-12) stands alone as the never-touch-what-we-don't-own mechanism. If
+  that guard is ever proven insufficient by injection, moving the account
+  into an Organization is the remedy.
+- **Budgets.** Tighter than the shape strictly requires — the declared
+  steady state is one stoppable t4g plus test VMs measured in hours, well
+  under USD 25/month. That is deliberate: time-to-detection matters more
+  than alert quiet while the reaper is still unproven. **The named risk:** a
+  legitimately busy Phase 3 week of corpus runs could trip the USD 25
+  warning, and a warning that fires on normal work trains the operator to
+  ignore it. If that happens, re-tune the warning budget and record why —
+  do not silence it.
 
 **OQ-8 — superseded by §5b.** The fingerprint splits into a
 provider-invariant core section and a provider section, digested
@@ -524,9 +556,23 @@ on one implementation of what it measures. Vincent's repo remains his and
 remains the reference implementation; work migrates here at his pace, with
 attribution preserved. (Was: Vincent's twice-asked, unanswered question.)
 
-**OQ-10 — One shared backend plane or one per operator?** *Recommendation:
-one per operator (Vincent's homelab, our AWS instance) — receipts are files
-and portable, so nothing forces a shared Grafana.*
+**OQ-10 — resolved: one backend plane per operator.** Vincent keeps his
+homelab otel-lgtm + Windmill; ours runs on the stoppable t4g in
+ap-southeast-2 (OQ-7), from the same compose files.
+
+**Why:** receipts (DD-17) are files and portable, so cross-operator
+comparison happens on artifacts, not on a shared dashboard — the same reason
+the environment contract lives in assay rather than here. A shared plane
+would add a cross-organisation dependency and an inbound path into whichever
+box hosts it, which fights DD-19's zero-inbound posture; and it would make
+DD-13's auto-shutdown dishonest, since stopping our plane to save money
+would darken someone else's telemetry.
+
+**The cost, named:** the Windmill Flows — the reaper above all — are
+duplicated per plane, so a fix to one is not a fix to the other. That
+duplication becomes visible at Phase 4 and is the point at which this
+question is worth reopening; if it is reopened, the answer is shared *Flow
+definitions in git*, not a shared host.
 
 ---
 
