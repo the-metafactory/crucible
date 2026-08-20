@@ -1,0 +1,12 @@
+template: compass-standards
+generate:
+  - format: claude-md
+repo_name: crucible
+repo_description: "The infrastructure factory — deterministic, digest-identified test environments for the metafactory ecosystem"
+deploy_command: "arc upgrade crucible"
+version_source: arc-manifest.yaml
+sections:
+  - position: "after:description"
+    file: docs/agents-md/architecture.md
+  - position: "after:critical-rules"
+    file: docs/agents-md/critical-rules.md
