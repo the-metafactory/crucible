@@ -1,0 +1,8 @@
+# arc-manifest.yaml -- arc package manifest
+# See: https://github.com/the-metafactory/arc
+
+name: "crucible"
+version: "0.1.0"
+description: "The infrastructure factory — deterministic, digest-identified test environments"
+author: "Andreas"
+repository: "the-metafactory/crucible"
