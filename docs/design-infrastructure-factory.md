@@ -504,15 +504,35 @@ are recorded now, before any run, per the Specification gate.
 **AC-0:** two captures across destroy/recreate are byte-identical (empty
 `git diff`); the injected fault produces a visibly red comparison.
 
-### Phase 1 — `environments/` lands in assay
+### Phase 1 — `environments/` lands in assay, **and something produces the file**
 - [ ] `environments/README.md` — the contract (declared in git, built to a
       digest, never mutated in place, destroyed after use, identity recorded)
 - [ ] `EnvironmentStamp.environment_digest` added, honest-null preserved
 - [ ] runner reports match/drift/unpinned per case for the new field
+- [ ] **the producing half exists** — a role that runs the fingerprint,
+      extracts the `core`/`provider` digests, and writes
+      `/etc/assay/environment.json` onto the VM
+
+**The producing half was missing and nearly stayed missing.** The contract
+was written on the consuming side (deliberately, so the instrument does not
+depend on one implementation of what it measures) — and *nothing on the
+producing side wrote the file*. A corpus run on a genuine factory VM would
+have stamped `environment_digest: null`, honestly, and AC-3 would have half
+happened: the cortex pin reaching the result while the environment identity
+did not. A contract with only one side implemented is a contract nobody has
+yet.
+
+Checked, so it is not a chicken-and-egg: the fingerprint reads
+`/etc/os-release`, `/etc/localtime`, `/etc/apt/*`, `/etc/ssh/sshd_config.d/*`,
+`/etc/docker/daemon.json` and `/etc/cloud/build.info`, and nothing else under
+`/etc`. Writing `/etc/assay/environment.json` therefore does not perturb the
+digest it carries, and the file can be written after capture.
 
 **AC-1:** a corpus run on a factory VM yields a non-null digest in
 `captured_on`; a run on an unfingerprinted laptop yields `null` **plus a
-note**, and the rollup still prints the unpinned count loudest.
+note**, and the rollup still prints the unpinned count loudest. The
+non-null half is unreachable until the producing role above exists — which
+is how the gap was found.
 
 ### Phase 2 — `modules/vm-aws`
 - [ ] provision from an unchanged `inventory/*.yaml`; `tofu.py` and
@@ -725,14 +745,31 @@ is the one to weigh at Phase 4 if this is reopened.
 ## 10. Delivery
 
 Ordered by DD-7, environment before corpus. Phases 0 and 1 are independent
-and can run in parallel; 2 depends on 1's contract; 3 on 2; 4 on 3.
+and can run in parallel. **Phase 3 does not depend on Phase 2** — that claim
+was in an earlier draft of this section and was wrong. Phase 3 is Ansible
+roles, an `arc install --pin`, and a corpus run; nothing in it is
+AWS-specific, and AC-3 says the corpus runs on **a factory VM**, not on an
+AWS VM. The reference implementation started producing factory VMs the
+moment AC-0 passed. So 3 depends on 1's contract, exactly as 2 does, and the
+two are siblings rather than a chain.
+
+Phase 4 still follows 3.
 
 1. **Phase 0 assists** — the two-line arc-role PR and the digest+injection
    PR to `vpzed/opentofu-pve-template`, offered upstream (DD-11).
 2. **Phase 1** — `environments/` contract + `environment_digest` in the
    stamp. Small, entirely in this repo, unblocks the AC-3 criterion.
-3. **Phase 2** — `modules/vm-aws` with reaper-first ordering (DD-13).
-4. **Phase 3** — cortex/myelin roles + the smoke loop; AC-3 is the exit.
+3. **Phase 3** — cortex/myelin roles + the smoke loop, **on the reference
+   implementation**; AC-3 is the exit and needs no hyperscaler account. This
+   moved ahead of Phase 2 deliberately: it is reachable now, it is the
+   criterion the spec exists for, and it costs its operator nothing.
+4. **Phase 2** — `modules/vm-aws` with reaper-first ordering (DD-13). With
+   Phase 3 already green on ProxMox, this stops being "the second provider"
+   and becomes the **portability proof**: §5b's conformance run asks that a
+   module's core fingerprint digest match *the reference implementation's
+   for the same definition*, which is unaskable until the reference has run
+   the whole loop. Sequenced this way, Phase 2 has something to be
+   conformant to.
 5. **Phase 4** — Windmill Script/Flow; tests P-2 explicitly.
 6. **Upstream issues raised, not worked around:** arc persisted-pin;
    anything the seam freeze surfaces goes to Vincent's repo as a PR.
