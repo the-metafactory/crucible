@@ -21,7 +21,7 @@ Two planes, one seam (`docs/design-infrastructure-factory.md`):
   (vpzed/opentofu-pve-template); AWS is the second provider. The provider
   list is not curated here — operators choose and extend (DD-21).
   Agnosticism is achieved at the contract, never via an abstraction layer,
-  and is measured by the provider-invariant core fingerprint digest — two
+  and is measurable by the provider-invariant core fingerprint digest — two
   providers can agree by coincidence, so the third is where the claim earns
   its keep.
 
@@ -66,10 +66,12 @@ This repo uses the ecosystem standard label set — types (`bug`,
 `future`). Do not create ad-hoc labels. Every open issue needs at least one
 type label and one priority label.
 
-Verify with compass-core's validator:
+Verify with compass-core's validator. It lives in compass-core, not in this
+repo — run it from crucible's root so it reads this repo's
+`compass.config.yaml`, pointing at a compass-core checkout:
 
 ```bash
-bun engine/validators/label-check.ts the-metafactory/crucible
+bun ../compass-core/engine/validators/label-check.ts the-metafactory/crucible
 ```
 
 ## GitHub Issue Tracking
@@ -126,7 +128,8 @@ Task: "Add the AWS provider module"
 ## Versioning & Releases
 
 Version source is `arc-manifest.yaml`. Deploy command: `arc upgrade
-crucible`.
+crucible` — named for the record, but it does **not** work today, because
+crucible is not installed as an arc package. See § CLAUDE.md Management.
 
 ## Naming
 
