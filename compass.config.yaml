@@ -1,0 +1,53 @@
+# compass.config.yaml — crucible's consumer config for compass-core.
+#
+# Values here are what is TRUE of this repo today, not the ecosystem
+# defaults copied in. Where a field would be aspirational it is omitted and
+# the reason is stated — this repo's whole thesis is that an artifact must
+# not claim more than it can evidence.
+#
+# Schema reference: claude/skills/governance/config-schema.md (compass-core)
+
+schema: compass-config/v1
+
+org:
+  name: the-metafactory
+  display_name: metafactory
+  default_license: MIT
+  default_branch: main
+
+features:
+  # Design decisions are DD-nn and acceptance criteria AC-n, both defined in
+  # docs/design-infrastructure-factory.md. There is no feature-issue prefix
+  # in use yet — issues are tracked as iteration umbrellas with phase
+  # sub-issues — so this is compass-core's default rather than an
+  # established convention here. Change it when one emerges.
+  id_prefix: F-
+  branch_pattern: "feat/{slug}"
+  commit_prefix: feat
+
+labels:
+  # No standards/labels.yaml in this repo; the ecosystem defaults are what is
+  # actually enforced, and `label-check.ts` confirms all seven are present.
+  # Deliberately not pointing `source` at a file that does not exist.
+  required:
+    types: [bug, documentation, feature, infrastructure]
+    priorities: [now, next, future]
+
+validators:
+  claude_md:
+    enabled: true
+    required_sections:
+      - Architecture
+      - Critical Rules
+      - Standard Operating Procedures
+  label_check:
+    enabled: true
+    enforce_required: true
+
+versioning:
+  manifest: arc-manifest.yaml
+  release_title_format: "crucible v{version} -- {description}"
+  # Named for the record, with a caveat: `arc upgrade crucible` currently
+  # exits "crucible is not installed" — crucible is not published as an arc
+  # package. See CLAUDE.md § CLAUDE.md Management.
+  deploy_command: "arc upgrade crucible"
