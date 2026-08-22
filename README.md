@@ -47,10 +47,13 @@ Two planes, one seam (full spec:
   the reference implementation
   ([vpzed/opentofu-pve-template](https://github.com/vpzed/opentofu-pve-template),
   by Vincent Zontini — the work this repo grew from); AWS is the second
-  provider. Hyperscaler/hypervisor agnosticism is achieved at the contract,
-  not through an abstraction layer, and it is **measured**: an environment
+  provider — but the provider list is not curated here: whoever runs the
+  factory picks what suits them and adds a module if one is missing (DD-21).
+  Hyperscaler/hypervisor agnosticism is achieved at the contract,
+  not through an abstraction layer, and it is **measurable**: an environment
   definition is proven portable when its provider-invariant fingerprint
-  digest matches across providers.
+  digest matches across providers — though two providers can agree by
+  coincidence, so the third implementation is where that stops being a claim.
 
 ## Status
 
