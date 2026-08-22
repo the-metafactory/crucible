@@ -538,19 +538,26 @@ happened: the cortex pin reaching the result while the environment identity
 did not. A contract with only one side implemented is a contract nobody has
 yet.
 
-Checked, so it is not a chicken-and-egg — but checked more carefully than
-the first draft of this paragraph, which said the capture reads a short list
-of `/etc` files "and nothing else under `/etc`". It reads more than that: it
-also enumerates enabled unit files (which live under `/etc/systemd`) via
-`systemctl list-unit-files --state=enabled`, and reads `/etc/passwd` via
-`getent passwd` — both in the **core** section.
+Checked, so it is not a chicken-and-egg — but stated as a rule this time,
+not as a list. Two drafts of this paragraph tried to enumerate what the
+capture reads under `/etc`, and both were incomplete: the first missed the
+enabled-unit and `/etc/passwd` reads, the second missed `/etc/group` (read
+via `id`) and the hostname. A list of that shape is wrong the moment the
+script grows a line, so the bound on the producing role is an invariant
+instead: **nothing the producing role does may change the package set, the
+enabled units, the login user or its group membership, the hostname, or the
+`.local`/`.bun` trees.** A plain file write under a new `/etc` directory
+satisfies that; an implementer who stays inside the invariant does not need
+to know which paths the capture happens to read.
 
 The conclusion survives: a plain file write to `/etc/assay/environment.json`
 is inert, so the file can be written after capture. **The loose wording was
 the hazard**, because it would have licensed implementing the producing half
-as an enabled systemd oneshot or an apt package — either of which moves the
-core digest silently, which is the one failure this document exists to
-prevent. Write the file; do not install a unit or a package to write it.
+as an enabled systemd oneshot or an apt package — or, just as quietly, as a
+role that adds the login user to a group or sets the hostname. Every one of
+those moves the core digest, which is the one failure this document exists
+to prevent. Write the file; do not install a unit or a package, and do not
+touch users, groups, or the hostname to write it.
 
 **AC-1:** a corpus run on a factory VM yields a non-null digest in
 `captured_on`; a run on an unfingerprinted laptop yields `null` **plus a
@@ -794,25 +801,32 @@ Phase 4 still follows 3.
    stamp, plus the producing role upstream (DD-11). Unblocks AC-3.
 3. **Phase 3** — cortex/myelin roles + the smoke loop, **on the reference
    implementation**; AC-3 is the exit and needs no hyperscaler account. This
-   moved ahead of Phase 2 deliberately: it is reachable now, it is the
-   criterion the spec exists for, and it costs its operator nothing.
+   moved ahead of Phase 2 deliberately: it needs no new account or spend, and
+   it is the criterion the spec exists for.
 4. **Phase 2** — `modules/vm-aws` with reaper-first ordering (DD-13).
 
    An earlier draft of this item justified the reorder by claiming §5b's
    conformance run needs Phase 3 to have happened first. **That was wrong,
    and wrong in this document's own signature way** — it invented a
    dependency in the opposite direction to the one it was correcting. The
-   core digest *excludes the software under test by design* (the fingerprint
-   prunes the arc install root; assay's `environments/README.md` states the
-   rule), so Phase 3's output is definitionally invisible to it, and a
-   reference core digest for `inventory/ubuntu-test.yaml` already exists in
-   the reference implementation's `evidence/ac-0.md`. Phase 2 could be run
-   today against that digest.
+   core digest is **pin-invariant**: the target's source tree and git ref are
+   excluded (the fingerprint prunes `.local/share/metafactory` and
+   `.local/state`; assay's `environments/README.md` states the rule the
+   exclusion serves), so the digest does not move when the target's pin
+   moves — which is the property Phase 2 needs from it. Full
+   target-invisibility is a stronger claim and is not true yet: arc's CLI
+   shims under `.local/bin` are still hashed into core, and the prune that
+   closes that is pending upstream as `vpzed/opentofu-pve-template#6`,
+   tracked here as `crucible#14`. Pin-invariance is enough for the point
+   being made here, and a reference core digest for
+   `inventory/ubuntu-test.yaml` already exists in the reference
+   implementation's `evidence/ac-0.md`. Phase 2 could be run today against
+   that digest.
 
    The real reason 3 comes first is smaller and does not need dressing up:
-   **Phase 3 is reachable now, on hardware that exists, and it is the exit
-   criterion.** Phase 2 needs an account that does not exist yet. That is
-   the whole argument.
+   **Phase 3 needs no new account or spend — it runs on hardware that
+   already exists — and it is the exit criterion.** Phase 2 needs an account
+   that does not exist yet. That is the whole argument.
 5. **Phase 4** — Windmill Script/Flow; tests P-2 explicitly.
 6. **Upstream issues raised, not worked around:** arc persisted-pin;
    anything the seam freeze surfaces goes to Vincent's repo as a PR.
