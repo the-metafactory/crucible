@@ -486,11 +486,21 @@ found six times).
   test plane, which would have quietly exempted the box that runs longest.
   **Reading Grafana is the case that tests it:** the persistent plane is read
   by a human, and under this rule that is an SSM port-forwarding session, not
-  an ingress rule. Telemetry flows *outbound* from test VMs into that plane
-  (DD-17), so nothing needs to listen publicly for it either.
-  In a standalone account there is no SCP to enforce no-public-ingress
-  account-wide, so this posture rests on the module source plus DD-20's CI
-  checks — **not** on the `managed = assay-factory` tag policy, which scopes
+  an ingress rule. Telemetry flows from test VMs into that plane (DD-17),
+  which means the plane's otel-lgtm collector **must listen** on an OTLP
+  port — outbound from the test VM is inbound to the backend plane. That
+  listener is the one genuine inbound path in the design; the rule above is
+  stated about port 22 and interactive access, and this is neither. How it
+  is confined — same VPC, a security group scoped to the test plane, or
+  another arrangement — is **open, and settled at Phase 2**, when
+  `modules/vm-aws` lands and there is a topology to settle it against. In a
+  standalone account there is no SCP to enforce no-public-ingress
+  account-wide, so this posture rests on the module source and nothing else:
+  **no CI check verifies it.** DD-20's four mechanisms are OIDC auth, the
+  plan/apply split, a delete-guard that reads the saved plan for `delete`
+  actions, and credential-less `tofu validate` + `fmt -check` — none
+  inspects a security group, and `tofu validate` checks HCL validity, not
+  policy. Nor does the `managed = assay-factory` tag policy, which scopes
   destroy/terminate (DD-12) and constrains no security-group rule at all.
 - This repo's confidentiality gate applies to every artifact the factory
   emits: receipts and fingerprints carry no live platform IDs, no real
@@ -595,10 +605,10 @@ would darken someone else's telemetry.
 draft said "the Windmill Flows, the reaper above all, are duplicated per
 plane". That was wrong twice. The reaper exists because EC2 bills (DD-13);
 Vincent's homelab plane has no EC2 test plane, so there is no reaper there to
-duplicate, and a ProxMox equivalent would be a different Flow anyway since
-termination lives below the seam. And "shared Flow definitions in git" is not
-a future remedy to reach for — §3 already puts every Windmill Flow above the
-seam, and DD-11 already forbids private copies. It is the standing rule.
+duplicate, and a ProxMox equivalent would be a different Flow anyway. And
+"shared Flow definitions in git" is not a future remedy to reach for — §3
+already puts every Windmill Flow above the seam, and DD-11 already forbids
+private copies. It is the standing rule.
 
 What per-operator actually costs is **two deployments to keep in step** — two
 Windmill instances, two otel-lgtm stacks, two sets of dashboards — and **no
