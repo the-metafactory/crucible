@@ -28,11 +28,10 @@ testable*. Today that prerequisite is unmet in three specific ways:
 
 **Scope of "up and running", stated so it can fail:** a contributor with a
 hypervisor **or** a cloud account can provision a pinned test VM from one
-YAML file, install a
-target system (cortex, myelin, arc) at an exact git ref, run a graded corpus
-against it with telemetry receipts, destroy everything, and **prove** the
-next VM is identical — where "prove" means an executable comparison, not a
-claim.
+YAML file, install a target system (cortex, myelin, arc) at an exact git
+ref, run a graded corpus against it with telemetry receipts, destroy
+everything, and **prove** the next VM is identical — where "prove" means an
+executable comparison, not a claim.
 
 ---
 
@@ -348,11 +347,10 @@ box with stuff I already have but not everyone has that luxury." That barrier
 is real and this DD does not remove it; what it removes is the assumption
 that removing it is *this repo's* call to make.
 
-Because the first draft of this DD got that wrong. It evaluated Oracle Cloud,
-admitted it as a "candidate", and attached a gate — as though the repo grants
-providers permission to be used. It does not, and a provider-agnostic
-architecture that also curates an approved list is not agnostic, it is just
-polite about it.
+**Rejected:** evaluating a provider, admitting it as a "candidate", and
+attaching a gate — as though the repo grants providers permission to be
+used. It does not, and a provider-agnostic architecture that also curates an
+approved list is not agnostic, it is just polite about it.
 
 **What an operator actually has to weigh**, stated once so nobody has to
 re-derive it per vendor:
@@ -390,29 +388,28 @@ per DD-12. That is our choice for our account. It is a deployment decision,
 operator-specific commercial reasoning behind it stays with the operator
 rather than in a public architecture document.
 
-**Two findings survived the exercise, and both are facts about the contract
-rather than about a vendor:**
+**Two findings came out of that evaluation, and both are facts about the
+contract rather than about a vendor:**
 
 - **Zero-inbound (DD-19) is reachable on more than one provider**, so the
   rule is not AWS-shaped by accident. OCI Bastion reaches instances with no
-  public IP; Ansible would ride it as it rides SSH-through-SSM. Stated
-  carefully, because the first draft overstated it: Bastion's *managed SSH*
-  sessions need the Oracle Cloud Agent's Bastion plugin on the target, which
-  is architecturally the **same** broker-plus-on-instance-agent shape as SSM,
-  not a different one; its *port-forwarding* sessions need no agent but do
-  need the target to admit the bastion's private-endpoint CIDR. So the honest
-  claim is that the zero-public-IP property survives a second provider — not
-  that a second, unrelated mechanism independently confirms it. Two samples
-  of one pattern is weaker evidence than it first looked, which is the same
-  coincidence-of-similarity trap §5b names below.
+  public IP; Ansible would ride it as it rides SSH-through-SSM. The claim is
+  narrow, deliberately: Bastion's *managed SSH* sessions need the Oracle
+  Cloud Agent's Bastion plugin on the target, which is architecturally the
+  **same** broker-plus-on-instance-agent shape as SSM, not a different one;
+  its *port-forwarding* sessions need no agent but do need the target to
+  admit the bastion's private-endpoint CIDR. So the honest claim is that the
+  zero-public-IP property survives a second provider — not that a second,
+  unrelated mechanism independently confirms it. Two samples of one pattern
+  are weak evidence, which is the same coincidence-of-similarity trap §5b
+  names below.
 - **The `instance_type` break is EC2-shaped, and it is still in the shared
   contract.** DD-12 calls it "the one honest contract break": `cpu_cores` and
-  `memory_mb` have no direct **AWS** equivalent (DD-12 already scopes it to
-  AWS — an earlier draft of this bullet dropped that word and then argued
-  against a reading DD-12 never invited). Providers with flexible shapes take
-  CPU and memory as independently specified inputs — within coupled ranges,
-  so a conformant module still rejects out-of-range combinations at plan
-  time — and can implement those fields directly.
+  `memory_mb` have no direct **AWS** equivalent, and DD-12 scopes the break
+  to AWS. Providers with flexible shapes take CPU and memory as
+  independently specified inputs — within coupled ranges, so a conformant
+  module still rejects out-of-range combinations at plan time — and can
+  implement those fields directly.
 
   But the honest form of this finding is uncomfortable rather than tidy: to
   accommodate EC2, **the shared `spec` object itself gained
@@ -474,9 +471,8 @@ same capture.)*
 Adding a provider — hypervisor or hyperscaler, Proxmox today, AWS next,
 Hetzner or libvirt or OCI or GCP whenever *someone* needs one, chosen by
 whoever is running the factory rather than blessed here (DD-21) — is one
-module under the seam plus a conformance
-run. Nothing above the seam changes, and the conformance run is the proof
-rather than the promise.
+module under the seam plus a conformance run. Nothing above the seam
+changes, and the conformance run is the proof rather than the promise.
 
 **Two providers are not yet evidence.** ProxMox and EC2 are both, underneath,
 "a VM that boots cloud-init", so agreement between them is partly a
@@ -525,45 +521,39 @@ that property had only been asserted against synthetic captures.
       so it is above the seam**: it goes upstream to
       `vpzed/opentofu-pve-template` as a PR (DD-11), never into a private
       copy. Phase 1 therefore spans three homes — the contract in assay, the
-      stamp in assay, the role in the reference implementation — which is
-      worth stating because the delivery list below used to call Phase 1
-      "entirely in this repo".
+      stamp in assay, the role in the reference implementation.
 
-**The producing half was missing and nearly stayed missing.** The contract
-was written on the consuming side (deliberately, so the instrument does not
-depend on one implementation of what it measures) — and *nothing on the
-producing side wrote the file*. A corpus run on a genuine factory VM would
-have stamped `environment_digest: null`, honestly, and AC-3 would have half
-happened: the cortex pin reaching the result while the environment identity
-did not. A contract with only one side implemented is a contract nobody has
-yet.
+**The producing half is a deliverable, not an implementation detail.** The
+contract is written on the consuming side deliberately, so the instrument
+does not depend on one implementation of what it measures — which leaves
+writing the file entirely to the factory. Without a producing role, a corpus
+run on a genuine factory VM stamps `environment_digest: null`, honestly, and
+AC-3 half happens: the cortex pin reaching the result while the environment
+identity does not. A contract with only one side implemented is a contract
+nobody has yet.
 
-Checked, so it is not a chicken-and-egg — but stated as a rule this time,
-not as a list. Two drafts of this paragraph tried to enumerate what the
-capture reads under `/etc`, and both were incomplete: the first missed the
-enabled-unit and `/etc/passwd` reads, the second missed `/etc/group` (read
-via `id`) and the hostname. A list of that shape is wrong the moment the
-script grows a line, so the bound on the producing role is an invariant
-instead: **nothing the producing role does may change the package set, the
-enabled units, the login user or its group membership, the hostname, or the
+**The producing role is bounded by an invariant, not by a list of paths.**
+Enumerating what the capture reads under `/etc` is wrong the moment the
+script grows a line, so the bound is stated over effects instead:
+**nothing the producing role does may change the package set, the enabled
+units, the login user or its group membership, the hostname, or the
 `.local`/`.bun` trees.** A plain file write under a new `/etc` directory
 satisfies that; an implementer who stays inside the invariant does not need
 to know which paths the capture happens to read.
 
-The conclusion survives: a plain file write to `/etc/assay/environment.json`
-is inert, so the file can be written after capture. **The loose wording was
-the hazard**, because it would have licensed implementing the producing half
-as an enabled systemd oneshot or an apt package — or, just as quietly, as a
-role that adds the login user to a group or sets the hostname. Every one of
-those moves the core digest, which is the one failure this document exists
-to prevent. Write the file; do not install a unit or a package, and do not
-touch users, groups, or the hostname to write it.
+This is not a chicken-and-egg: a plain file write to
+`/etc/assay/environment.json` is inert, so the file can be written after
+capture. The hazard is a looser reading of "write the file" — implementing
+the producing half as an enabled systemd oneshot or an apt package, or, just
+as quietly, as a role that adds the login user to a group or sets the
+hostname. Every one of those moves the core digest, which is the one failure
+this document exists to prevent. Write the file; do not install a unit or a
+package, and do not touch users, groups, or the hostname to write it.
 
 **AC-1:** a corpus run on a factory VM yields a non-null digest in
 `captured_on`; a run on an unfingerprinted laptop yields `null` **plus a
 note**, and the rollup still prints the unpinned count loudest. The
-non-null half is unreachable until the producing role above exists — which
-is how the gap was found.
+non-null half is unreachable until the producing role above exists.
 
 ### Phase 2 — `modules/vm-aws`
 - [ ] provision from an unchanged `inventory/*.yaml`; `tofu.py` and
@@ -585,8 +575,8 @@ reference implementation's for the same definition.
 - [ ] `metafactory_cortex`, `metafactory_myelin` roles using
       `arc install --pin <ref>`
 - [ ] the inherited smoke loop runs end to end:
-      *provision → substrate → arc → target → smoke test* — five steps;
-      earlier drafts said six — stopping at first failure
+      *provision → substrate → arc → target → smoke test* — five steps,
+      stopping at first failure
 
 **AC-3 (the criterion the whole spec exists for):** the execution-boundary
 corpus runs on a factory VM against a cortex checkout pinned to an exact
@@ -596,8 +586,9 @@ non-null**. The second half is stated explicitly because without it AC-3
 passes in exactly the half-happened state Phase 1 calls unacceptable — the
 target's pin reaching the result while the environment's identity does not.
 (AC-1 covers the same property from the assay side; naming it here too means
-neither phase can pass by pointing at the other.) When that holds, the factory's pin has reached
-the assay result, and "unpinned baseline: 12 of 12" starts falling.
+neither phase can pass by pointing at the other.) When that holds, the
+factory's pin has reached the assay result, and "unpinned baseline: 12 of
+12" starts falling.
 
 ### Phase 4 — Orchestration
 - [ ] first Windmill Script drives `tofu` + `ansible` (Vincent's stated next
@@ -637,8 +628,8 @@ found six times).
   anything, including the operator's own address; access is SSM Session
   Manager only, and Ansible rides SSH-through-SSM (DD-19, resolving OQ-6).
   Scoped to both planes deliberately — DD-19 and `critical-rules.md` both
-  state it unscoped, and an earlier draft of this bullet narrowed it to the
-  test plane, which would have quietly exempted the box that runs longest.
+  state it unscoped, and narrowing it to the test plane would quietly exempt
+  the box that runs longest.
   **Reading Grafana is the case that tests it:** the persistent plane is read
   by a human, and under this rule that is an SSM port-forwarding session, not
   an ingress rule. Telemetry flows from test VMs into that plane (DD-17),
@@ -761,20 +752,18 @@ box hosts it, which fights DD-19's zero-inbound posture; and it would make
 DD-13's auto-shutdown dishonest, since stopping our plane to save money
 would darken someone else's telemetry.
 
-**The cost, named — and it is not the one first written here.** An earlier
-draft said "the Windmill Flows, the reaper above all, are duplicated per
-plane". That was wrong twice. The reaper exists because EC2 bills (DD-13);
-Vincent's homelab plane has no EC2 test plane, so there is no reaper there to
-duplicate. And
-"shared Flow definitions in git" is not a future remedy to reach for — §3
-already puts every Windmill Flow above the seam, and DD-11 already forbids
-private copies. It is the standing rule.
+**The cost, named.** One plane per operator costs **two deployments to keep
+in step** — two Windmill instances, two otel-lgtm stacks, two sets of
+dashboards — and **no single view across operators**: comparing two
+operators' results means exchanging receipt files, not opening one Grafana.
+That is a real cost, and it is the one to weigh at Phase 4 if this is
+reopened.
 
-What per-operator actually costs is **two deployments to keep in step** — two
-Windmill instances, two otel-lgtm stacks, two sets of dashboards — and **no
-single view across operators**: comparing two operators' results means
-exchanging receipt files, not opening one Grafana. That is a real cost and it
-is the one to weigh at Phase 4 if this is reopened.
+What it does *not* cost is duplicated Flow definitions or a duplicated
+reaper. §3 puts every Windmill Flow above the seam and DD-11 forbids private
+copies, so the definitions are shared by standing rule rather than by a
+future remedy; and the reaper exists because EC2 bills (DD-13), so a homelab
+plane with no EC2 test plane has no reaper to duplicate.
 
 ---
 
@@ -784,14 +773,13 @@ Ordered by DD-7, environment before corpus — the environment a corpus runs
 on must be green before the corpus is believed, which the reference
 implementation satisfies today (AC-0). DD-7 orders *environment before
 corpus*, not *every provider before any corpus*, so a second provider is not
-a prerequisite for running the corpus on the first. Phases 0 and 1 are independent
-and can run in parallel. **Phase 3 does not depend on Phase 2** — that claim
-was in an earlier draft of this section and was wrong. Phase 3 is Ansible
-roles, an `arc install --pin`, and a corpus run; nothing in it is
-AWS-specific, and AC-3 says the corpus runs on **a factory VM**, not on an
-AWS VM. The reference implementation started producing factory VMs the
-moment AC-0 passed. So 3 depends on 1's contract, exactly as 2 does, and the
-two are siblings rather than a chain.
+a prerequisite for running the corpus on the first. Phases 0 and 1 are
+independent and can run in parallel. **Phase 3 does not depend on Phase 2.**
+Phase 3 is Ansible roles, an `arc install --pin`, and a corpus run; nothing
+in it is AWS-specific, and AC-3 says the corpus runs on **a factory VM**,
+not on an AWS VM. The reference implementation started producing factory VMs
+the moment AC-0 passed. So 3 depends on 1's contract, exactly as 2 does, and
+the two are siblings rather than a chain.
 
 Phase 4 still follows 3.
 
@@ -805,23 +793,23 @@ Phase 4 still follows 3.
    it is the criterion the spec exists for.
 4. **Phase 2** — `modules/vm-aws` with reaper-first ordering (DD-13).
 
-   An earlier draft of this item justified the reorder by claiming §5b's
-   conformance run needs Phase 3 to have happened first. **That was wrong,
-   and wrong in this document's own signature way** — it invented a
-   dependency in the opposite direction to the one it was correcting. The
-   core digest is **pin-invariant**: the target's source tree and git ref are
-   excluded (the fingerprint prunes `.local/share/metafactory` and
-   `.local/state`; assay's `environments/README.md` states the rule the
-   exclusion serves), so the digest does not move when the target's pin
-   moves — which is the property Phase 2 needs from it. Full
-   target-invisibility is a stronger claim and is not true yet: arc's CLI
-   shims under `.local/bin` are still hashed into core, and the prune that
-   closes that is pending upstream as `vpzed/opentofu-pve-template#6`,
-   tracked here as `crucible#14`. Pin-invariance is enough for the point
-   being made here, and a reference core digest for
-   `inventory/ubuntu-test.yaml` already exists in the reference
-   implementation's `evidence/ac-0.md`. Phase 2 could be run today against
-   that digest.
+   **Retracted, because it was published and a reader may have relied on
+   it:** this item once justified the reorder by claiming §5b's conformance
+   run needs Phase 3 to have happened first. **That was wrong, and wrong in
+   this document's own signature way** — it invented a dependency in the
+   opposite direction to the one it was correcting. The core digest is
+   **pin-invariant**: the target's source tree and git ref are excluded (the
+   fingerprint prunes `.local/share/metafactory` and `.local/state`; assay's
+   `environments/README.md` states the rule the exclusion serves), so the
+   digest does not move when the target's pin moves — which is the property
+   Phase 2 needs from it. Full target-invisibility is a stronger claim and
+   is not true yet: arc's CLI shims under `.local/bin` are still hashed into
+   core, and the prune that closes that is pending upstream as
+   `vpzed/opentofu-pve-template#6`, tracked here as `crucible#14`.
+   Pin-invariance is enough for the point being made here, and a reference
+   core digest for `inventory/ubuntu-test.yaml` already exists in the
+   reference implementation's `evidence/ac-0.md`. Phase 2 could be run today
+   against that digest.
 
    The real reason 3 comes first is smaller and does not need dressing up:
    **Phase 3 needs no new account or spend — it runs on hardware that
