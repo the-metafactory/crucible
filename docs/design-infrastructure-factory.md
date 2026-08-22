@@ -371,23 +371,21 @@ re-derive it per vendor:
 
 **A worked example of the second criterion**, offered as method rather than
 as a verdict. As observed on 2026-08-23: Oracle's Always Free Ampere envelope
-went from 4 OCPU / 24 GB to 2 OCPU / 12 GB effective 2026-06-15, and running
-instances were stopped; *we found no announcement accompanying it* — reported
+went from 4 OCPU / 24 GB to 2 OCPU / 12 GB effective 2026-06-15, and on
+free-only accounts instances exceeding the new limits were shut down until
+manually resized; *we found no announcement accompanying it* — reported
 by [InfoQ](https://www.infoq.com/news/2026/07/oracle-cloud-free-tier-limits/)
 and reflected in [Oracle's own Always Free
 documentation](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
 Dated and sourced deliberately: this is a point-in-time observation about a
 third party, it will age, and "no announcement" is the absence of evidence
 rather than evidence of absence. Whether it disqualifies OCI is the
-operator's call —
-for a hobby rebuild it is an inconvenience, for a shared baseline other
-people cite it is disqualifying. The point is that it is a question to ask
-of any supplier, and it is answerable from public record before committing.
+operator's call. The point is that it is a question to ask of any supplier,
+and it is answerable from public record before committing.
 
 **What the metafactory deployment itself runs is AWS** — the second provider
-per DD-12. That is our choice for our account, on engineering quality and on
-the working relationship with that vendor's people. It is a deployment
-decision, **not** a recommendation this repo makes to anyone else, and the
+per DD-12. That is our choice for our account. It is a deployment decision,
+**not** a recommendation this repo makes to anyone else, and the
 operator-specific commercial reasoning behind it stays with the operator
 rather than in a public architecture document.
 
