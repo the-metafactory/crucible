@@ -219,6 +219,9 @@ instance (t4g-class) running the same compose files as Vincent's backend.
 - **The test plane keeps the TTL reaper** — instances there are measured in
   hours by design, and the reaper terminates rather than stops.
 
+**Concrete values, set by OQ-7:** a new standalone account in
+**ap-southeast-2**; warning budget **USD 25**, ceiling budget **USD 75**.
+
 ### DD-14 — Targets install via arc at an exact ref, and every install can fail on drift
 **Decision:** layer 3 (the software under test) is installed by arc:
 
@@ -475,8 +478,30 @@ found six times).
 
 - Dedicated account; credentials never in the repo; sops stays on the
   reference side, IAM/SSM parameters on the AWS side.
-- No public ingress to the test plane: SSH restricted to the operator's
-  address, or SSM Session Manager (OQ-6).
+- **Zero inbound, both planes.** No security group opens port 22 to
+  anything, including the operator's own address; access is SSM Session
+  Manager only, and Ansible rides SSH-through-SSM (DD-19, resolving OQ-6).
+  Scoped to both planes deliberately — DD-19 and `critical-rules.md` both
+  state it unscoped, and an earlier draft of this bullet narrowed it to the
+  test plane, which would have quietly exempted the box that runs longest.
+  **Reading Grafana is the case that tests it:** the persistent plane is read
+  by a human, and under this rule that is an SSM port-forwarding session, not
+  an ingress rule. Telemetry flows from test VMs into that plane (DD-17),
+  which means the plane's otel-lgtm collector **must listen** on an OTLP
+  port — outbound from the test VM is inbound to the backend plane. That
+  listener is the one genuine inbound path in the design; the rule above is
+  stated about port 22 and interactive access, and this is neither. How it
+  is confined — same VPC, a security group scoped to the test plane, or
+  another arrangement — is **open, and settled at Phase 2**, when
+  `modules/vm-aws` lands and there is a topology to settle it against. In a
+  standalone account there is no SCP to enforce no-public-ingress
+  account-wide, so this posture rests on the module source and nothing else:
+  **no CI check verifies it.** DD-20's four mechanisms are OIDC auth, the
+  plan/apply split, a delete-guard that reads the saved plan for `delete`
+  actions, and credential-less `tofu validate` + `fmt -check` — none
+  inspects a security group, and `tofu validate` checks HCL validity, not
+  policy. Nor does the `managed = assay-factory` tag policy, which scopes
+  destroy/terminate (DD-12) and constrains no security-group rule at all.
 - This repo's confidentiality gate applies to every artifact the factory
   emits: receipts and fingerprints carry no live platform IDs, no real
   hostnames outside the test plane's own ephemeral names, placeholders in
@@ -505,10 +530,50 @@ found six times).
 SSH-through-SSM so nothing above the seam changes. (Was: SSH restricted by
 security group.)
 
-**OQ-7 — Which account and region?** Needs Andreas and JC. Region trades
-operator latency (ap-southeast-2) against instance-family breadth
-(us-east-1). *Recommendation: decide with the budget alarm, as one
-decision.*
+**OQ-7 — resolved.** The factory runs in a **new standalone AWS account**
+in **ap-southeast-2 (Sydney)**, with a **USD 25 warning budget and a USD 75
+ceiling budget** — two independent budgets per DD-13, each firing at 100% of
+its own limit.
+
+- **Region.** Chosen on operator latency, and the argument has a shelf life
+  that is stated rather than hidden.
+
+  Through Phases 2 and 3 the Ansible control node is the operator's machine,
+  so every task pays an Auckland round trip and the persistent Grafana is
+  read from Auckland too. **That argument expires at Phase 4**, where
+  Windmill drives `tofu` and `ansible` from a container in-region and the
+  round trips stop crossing the Pacific — and DD-20 already runs `tofu` from
+  GitHub Actions rather than a laptop. So: revisit the region once Phase 4
+  lands, on the same footing as OQ-10's Phase 4 revisit. (Note the SSM tunnel
+  itself is not the cost — plain SSH pays per-task round trips too; DD-19
+  adds a per-*host* session setup, not a per-*task* penalty, and says nothing
+  about latency.)
+
+  **Instance-family breadth is not a live constraint, and neither region was
+  verified for it.** DD-18 commits only to "arm64 instance types from day
+  one" and names no family; the sole family this spec names anywhere is
+  DD-13's "t4g-class". So the breadth half of the original OQ-7 trade-off has
+  nothing concrete on either side of it yet. ap-southeast-6 (Auckland) is
+  deferred for **availability**, which is a real and checkable difference —
+  not for breadth, where this document would be holding it to a standard
+  ap-southeast-2 has not met either. When a case needs a specific family,
+  check both regions then (`aws ec2 describe-instance-type-offerings`) and
+  record the result rather than the assumption.
+- **Account.** Standalone, not an Organization member — DD-13 requires only
+  that it never be an existing work or personal account, and a standalone
+  account is the shortest path to that. The cost is named: there is **no SCP
+  backstop**, so the `managed = assay-factory` tag-scoped IAM policy
+  (DD-12) stands alone as the never-touch-what-we-don't-own mechanism. If
+  that guard is ever proven insufficient by injection, moving the account
+  into an Organization is the remedy.
+- **Budgets.** Tighter than the shape strictly requires — the declared
+  steady state is one stoppable t4g plus test VMs measured in hours, well
+  under USD 25/month. That is deliberate: time-to-detection matters more
+  than alert quiet while the reaper is still unproven. **The named risk:** a
+  legitimately busy Phase 3 week of corpus runs could trip the USD 25
+  warning, and a warning that fires on normal work trains the operator to
+  ignore it. If that happens, re-tune the warning budget and record why —
+  do not silence it.
 
 **OQ-8 — superseded by §5b.** The fingerprint splits into a
 provider-invariant core section and a provider section, digested
@@ -524,9 +589,32 @@ on one implementation of what it measures. Vincent's repo remains his and
 remains the reference implementation; work migrates here at his pace, with
 attribution preserved. (Was: Vincent's twice-asked, unanswered question.)
 
-**OQ-10 — One shared backend plane or one per operator?** *Recommendation:
-one per operator (Vincent's homelab, our AWS instance) — receipts are files
-and portable, so nothing forces a shared Grafana.*
+**OQ-10 — resolved: one backend plane per operator.** Vincent keeps his
+homelab otel-lgtm + Windmill; ours runs on the stoppable t4g in
+ap-southeast-2 (OQ-7), from the same compose files.
+
+**Why:** receipts (DD-17) are files and portable, so cross-operator
+comparison happens on artifacts, not on a shared dashboard — the same reason
+the environment contract lives in assay rather than here. A shared plane
+would add a cross-organisation dependency and an inbound path into whichever
+box hosts it, which fights DD-19's zero-inbound posture; and it would make
+DD-13's auto-shutdown dishonest, since stopping our plane to save money
+would darken someone else's telemetry.
+
+**The cost, named — and it is not the one first written here.** An earlier
+draft said "the Windmill Flows, the reaper above all, are duplicated per
+plane". That was wrong twice. The reaper exists because EC2 bills (DD-13);
+Vincent's homelab plane has no EC2 test plane, so there is no reaper there to
+duplicate. And
+"shared Flow definitions in git" is not a future remedy to reach for — §3
+already puts every Windmill Flow above the seam, and DD-11 already forbids
+private copies. It is the standing rule.
+
+What per-operator actually costs is **two deployments to keep in step** — two
+Windmill instances, two otel-lgtm stacks, two sets of dashboards — and **no
+single view across operators**: comparing two operators' results means
+exchanging receipt files, not opening one Grafana. That is a real cost and it
+is the one to weigh at Phase 4 if this is reopened.
 
 ---
 
