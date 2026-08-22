@@ -18,3 +18,6 @@
 - **A detector is untrusted until observed failing.** The fingerprint
   comparator, the reaper, every guard: record the injected fault and the
   observed red beside the check (assay DD-3).
+- **`git add -A` is unsafe here.** The dev loop creates sub-agent worktrees
+  under `.claude/`; staging everything has committed one as a gitlink
+  before. Stage explicit paths.

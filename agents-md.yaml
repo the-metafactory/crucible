@@ -1,4 +1,8 @@
-template: compass-standards
+# The template identifier. `compass-core` is the repo that actually hosts
+# `templates/CLAUDE.md.template`; assay still carries the older value
+# `compass-standards`, which names no repo in the org. Nothing reads this
+# field yet, so it is set to what is true rather than to the stale precedent.
+template: compass-core
 generate:
   - format: claude-md
 repo_name: crucible
