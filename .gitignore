@@ -1,0 +1,3 @@
+
+# Sub-agent worktrees — created inside the repo by the dev loop, never committed.
+.claude/worktrees/
