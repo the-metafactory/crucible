@@ -605,7 +605,7 @@ would darken someone else's telemetry.
 draft said "the Windmill Flows, the reaper above all, are duplicated per
 plane". That was wrong twice. The reaper exists because EC2 bills (DD-13);
 Vincent's homelab plane has no EC2 test plane, so there is no reaper there to
-duplicate, and a ProxMox equivalent would be a different Flow anyway. And
+duplicate. And
 "shared Flow definitions in git" is not a future remedy to reach for — §3
 already puts every Windmill Flow above the seam, and DD-11 already forbids
 private copies. It is the standing rule.
