@@ -334,6 +334,94 @@ intervening work; uncovered tofu roots merging broken HCL silently). The
 stale-base guard those repos also run is already this repo's CLAUDE.md rule;
 CI should enforce it here too rather than trusting recall.
 
+### DD-21 — Provider selection belongs to the operator, not to this repo
+**Decision:** crucible defines the seam and maintains no blessed-provider
+list. Whoever runs the factory picks the provider that suits them and, if a
+module does not exist yet, writes one — §5b makes that one module plus a
+conformance run, with nothing above the seam changing.
+
+**The problem that prompted it**, which is not the same as the decision:
+Vincent Zontini observed that contributing to this factory currently requires
+either a hypervisor or a credit card — "I was able to build a little hardware
+box with stuff I already have but not everyone has that luxury." That barrier
+is real and this DD does not remove it; what it removes is the assumption
+that removing it is *this repo's* call to make.
+
+Because the first draft of this DD got that wrong. It evaluated Oracle Cloud,
+admitted it as a "candidate", and attached a gate — as though the repo grants
+providers permission to be used. It does not, and a provider-agnostic
+architecture that also curates an approved list is not agnostic, it is just
+polite about it.
+
+**What an operator actually has to weigh**, stated once so nobody has to
+re-derive it per vendor:
+
+- **Fit at the three contracts (§5b)** — can the module implement every
+  `spec` field or reject it loudly; can it emit the output contract
+  byte-compatibly; does its **core** fingerprint digest match another
+  provider's for the same definition. All three are executable. None of them
+  are matters of opinion.
+- **Vendor predictability, which is a functional requirement here rather
+  than a preference.** A factory is a durable dependency: the premise is
+  *known, controlled conditions*, sustained for years, with other people's
+  results resting on them. A supplier that changes terms or resource
+  envelopes unilaterally undermines that directly, however good the
+  instances are. Worth weighing on the same page as latency and price,
+  because it bites later and harder than either.
+
+**A worked example of the second criterion**, offered as method rather than
+as a verdict. As observed on 2026-08-23: Oracle's Always Free Ampere envelope
+went from 4 OCPU / 24 GB to 2 OCPU / 12 GB effective 2026-06-15, and on
+free-only accounts instances exceeding the new limits were shut down until
+manually resized; *we found no announcement accompanying it* — reported
+by [InfoQ](https://www.infoq.com/news/2026/07/oracle-cloud-free-tier-limits/)
+and reflected in [Oracle's own Always Free
+documentation](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+Dated and sourced deliberately: this is a point-in-time observation about a
+third party, it will age, and "no announcement" is the absence of evidence
+rather than evidence of absence. Whether it disqualifies OCI is the
+operator's call. The point is that it is a question to ask of any supplier,
+and it is answerable from public record before committing.
+
+**What the metafactory deployment itself runs is AWS** — the second provider
+per DD-12. That is our choice for our account. It is a deployment decision,
+**not** a recommendation this repo makes to anyone else, and the
+operator-specific commercial reasoning behind it stays with the operator
+rather than in a public architecture document.
+
+**Two findings survived the exercise, and both are facts about the contract
+rather than about a vendor:**
+
+- **Zero-inbound (DD-19) is reachable on more than one provider**, so the
+  rule is not AWS-shaped by accident. OCI Bastion reaches instances with no
+  public IP; Ansible would ride it as it rides SSH-through-SSM. Stated
+  carefully, because the first draft overstated it: Bastion's *managed SSH*
+  sessions need the Oracle Cloud Agent's Bastion plugin on the target, which
+  is architecturally the **same** broker-plus-on-instance-agent shape as SSM,
+  not a different one; its *port-forwarding* sessions need no agent but do
+  need the target to admit the bastion's private-endpoint CIDR. So the honest
+  claim is that the zero-public-IP property survives a second provider — not
+  that a second, unrelated mechanism independently confirms it. Two samples
+  of one pattern is weaker evidence than it first looked, which is the same
+  coincidence-of-similarity trap §5b names below.
+- **The `instance_type` break is EC2-shaped, and it is still in the shared
+  contract.** DD-12 calls it "the one honest contract break": `cpu_cores` and
+  `memory_mb` have no direct **AWS** equivalent (DD-12 already scopes it to
+  AWS — an earlier draft of this bullet dropped that word and then argued
+  against a reading DD-12 never invited). Providers with flexible shapes take
+  CPU and memory as independently specified inputs — within coupled ranges,
+  so a conformant module still rejects out-of-range combinations at plan
+  time — and can implement those fields directly.
+
+  But the honest form of this finding is uncomfortable rather than tidy: to
+  accommodate EC2, **the shared `spec` object itself gained
+  `instance_type`** — a change *above* the seam, which §5b says should not
+  happen, and precisely the "special case" §5b now offers as evidence that a
+  contract was really a description of one provider. It is in the contract
+  today. Either it becomes a provider-local override, or the residue is
+  acknowledged; asserting the contract came through clean would be the
+  comfortable reading rather than the true one.
+
 ---
 
 ## 5b. Hyperscaler- and hypervisor-agnostic: contract, not abstraction
@@ -383,9 +471,20 @@ same capture.)*
   implementation's** for the same definition.
 
 Adding a provider — hypervisor or hyperscaler, Proxmox today, AWS next,
-Hetzner or libvirt or GCP whenever someone needs one — is one module under
-the seam plus a conformance run. Nothing above the seam changes, and the
-conformance run is the proof rather than the promise.
+Hetzner or libvirt or OCI or GCP whenever *someone* needs one, chosen by
+whoever is running the factory rather than blessed here (DD-21) — is one
+module under the seam plus a conformance
+run. Nothing above the seam changes, and the conformance run is the proof
+rather than the promise.
+
+**Two providers are not yet evidence.** ProxMox and EC2 are both, underneath,
+"a VM that boots cloud-init", so agreement between them is partly a
+coincidence of similarity. The claim gets its first real test at the third
+implementation, and it gets a better test when that provider's shape model
+*disagrees* — OCI takes OCPU and memory as independent inputs where EC2 takes
+a fixed type name. An inventory file that plans cleanly against both is
+evidence the `spec` object is a contract; one that needs a special case is
+evidence it was an EC2 description wearing a contract's clothes.
 
 ---
 
@@ -518,6 +617,11 @@ found six times).
   drives them yet.
 - **Replacing the ProxMox path.** It is the reference implementation, not
   a legacy one.
+- **Curating a provider list.** This repo defines the seam and ships the
+  modules its own operators needed; it does not rank, bless or exclude
+  providers on anyone else's behalf (DD-21). A module that satisfies the
+  §5b conformance run is conformant, whoever it is for and whatever this
+  repo's authors happen to run.
 - **Discovery.** The factory builds environments for locking in known-good;
   it is not a bypass-discovery engine (charter boundary, restated because a
   factory is exactly where that confusion would creep in).
