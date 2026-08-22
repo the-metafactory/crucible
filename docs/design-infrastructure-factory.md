@@ -22,9 +22,11 @@ testable*. Today that prerequisite is unmet in three specific ways:
    Vincent has built and proven a four-component stack (OpenTofu, Ansible,
    otel-lgtm, Windmill) against ProxMox VE in his homelab. It cannot yet be
    picked up by anyone else, which fails DD-8's day-one test.
-3. **`environments/` does not exist in this repo.** The charter names the
-   tier; there is no directory, no contract, and nowhere for the factory's
-   output to land.
+3. **`environments/` does not exist yet, on either side.** The charter names
+   the tier; there is no directory here for environment definitions to land
+   in, no contract anywhere saying what a consumer may expect of one, and
+   nothing that carries a built machine's identity off it. The contract's
+   home is assay and the definitions' home is this repo (§4a, OQ-9).
 
 **Scope of "up and running", stated so it can fail:** a contributor with a
 hypervisor **or** a cloud account can provision a pinned test VM from one
@@ -117,16 +119,30 @@ The tray note's single hard requirement, now mechanized:
    configuration, enabled units, login user, layer-2 file trees. Per-instance
    noise (host keys, machine-id, MACs, timestamps) stays excluded — that
    exclusion list is itself part of the contract and lives beside the script.
-2. **Digest.** `environment_digest = sha256(canonical text)`. The text is
-   committed for humans to `git diff`; the digest is what machines compare.
-3. **Record.** Each environment definition lives in `environments/<name>/`
-   with its fingerprint text and digest committed at lock time.
-4. **Reach the result.** `EnvironmentStamp` gains
-   `environment_digest: string | null`. The honest-null rule is unchanged: a
-   corpus run on an unfingerprinted machine (a laptop) records `null` plus a
-   note — never a guess. `DriftAssessment` compares run-time digest against
-   the case's `captured_on` and reports **match / drift / unpinned** exactly
-   as it does today for the other fields.
+2. **Digest.** The canonical text is digested in two sections rather than
+   one: a provider-invariant **core** and a **provider** section (§5b). The
+   text is committed for humans to `git diff`; the digests are what machines
+   compare, and the core digest is the one a result records as
+   `environment_digest`.
+3. **Record — twice, for two different jobs.** The **declared** identity is
+   committed here: each environment definition lives in `environments/<name>/`
+   in this repo with its fingerprint text and its core and provider
+   `DIGEST`s committed at lock time, reviewable and diffable. The
+   **observed** identity is written onto each built machine at run time
+   (§4a), and it is the only one that crosses into assay. These are not one
+   digest written down twice — they are an expectation and an observation,
+   and comparing them is how a build is shown to have reproduced its
+   definition. assay keeps no committed copy of either, deliberately: two
+   homes for one digest drift apart (`environments/README.md`, "What is not
+   in this directory, and why").
+4. **Reach the result.** The built machine carries its digests in
+   `/etc/assay/environment.json` (§4a); assay reads that file at run time,
+   and `EnvironmentStamp` gains `environment_digest: string | null`. The
+   honest-null rule is unchanged: a corpus run on an unfingerprinted machine
+   (a laptop) records `null` plus a note — never a guess. `DriftAssessment`
+   compares run-time digest against the case's `captured_on` and reports
+   **match / drift / unpinned** exactly as it does today for the other
+   fields.
 5. **Prove the comparator can fail** (DD-3 applied to the factory itself).
    Before the digest is trusted: inject a fault — change one pinned package
    version — rebuild, recapture, and observe the non-empty diff and changed
@@ -135,10 +151,47 @@ The tray note's single hard requirement, now mechanized:
    watched fire.
 
 **Comparability boundary, stated up front:** a pve environment and an aws
-environment produce *different* digests by design (different kernels,
-different cloud-init datasources). Comparability is **within** an
-environment definition, across rebuilds. Cross-provider comparability is
-OQ-8, deliberately deferred.
+environment produce *different* **provider** digests by design (different
+kernels, different cloud-init datasources), and the same **core** digest
+when the definition is genuinely portable. So comparability across rebuilds
+of one definition is the whole capture; comparability across providers is
+the core section alone. That is the §5b split, and it supersedes OQ-8's
+divergent-by-design deferral.
+
+### 4a — The interchange is defined in assay; crucible writes it
+
+The digest reaches a result through exactly one file on the machine:
+**`/etc/assay/environment.json`**, written by the factory onto every VM it
+has fingerprinted and read by assay at run time. Nothing else is exchanged —
+no network call, no shared database, no agent.
+
+**That file is specified in assay**, at
+[`environments/README.md`](https://github.com/the-metafactory/assay/blob/main/environments/README.md),
+and is deliberately **not restated here**. A second copy of a contract is a
+contract that drifts. The direction of authority is the same one OQ-9
+records: an instrument that depends on one implementation of the thing it
+measures is not an instrument. crucible implements the **producing** side
+and treats that file as its specification.
+
+What a reader of *this* document needs in order to know what is being
+produced:
+
+- the path is `/etc/assay/environment.json`, with `ASSAY_ENVIRONMENT_FILE`
+  overriding it for factories that cannot write to `/etc`;
+- it carries **`core_digest`** and **`provider_digest`** — the two halves of
+  the §5b split, and `core_digest` is the one that becomes
+  `environment_digest` in a result;
+- it is schema-versioned, and assay **refuses** a version it does not know
+  rather than parsing it best-effort. A producing role that invents a field
+  or bumps the version unilaterally makes its machines unreadable rather
+  than forgiven, so schema changes are proposed in assay first.
+
+Field meanings, required-versus-optional, and the exhaustive list of
+refusals are in assay's file. Read it before implementing the role.
+
+The role that writes this file is Phase 1's producing half. It is an Ansible
+role, so it is above the seam (§3) and goes upstream to the reference
+implementation rather than into a private copy (DD-11).
 
 ---
 
@@ -517,11 +570,11 @@ that property had only been asserted against synthetic captures.
 - [ ] runner reports match/drift/unpinned per case for the new field
 - [ ] **the producing half exists** — a role that runs the fingerprint,
       extracts the `core`/`provider` digests, and writes
-      `/etc/assay/environment.json` onto the VM. **This is an Ansible role,
-      so it is above the seam**: it goes upstream to
-      `vpzed/opentofu-pve-template` as a PR (DD-11), never into a private
-      copy. Phase 1 therefore spans three homes — the contract in assay, the
-      stamp in assay, the role in the reference implementation.
+      `/etc/assay/environment.json` onto the VM to assay's schema (§4a).
+      **This is an Ansible role, so it is above the seam**: it goes
+      upstream to `vpzed/opentofu-pve-template` as a PR (DD-11), never into
+      a private copy. Phase 1 therefore spans three homes — the contract in
+      assay, the stamp in assay, the role in the reference implementation.
 
 **The producing half is a deliverable, not an implementation detail.** The
 contract is written on the consuming side deliberately, so the instrument
