@@ -26,8 +26,9 @@ testable*. Today that prerequisite is unmet in three specific ways:
    tier; there is no directory, no contract, and nowhere for the factory's
    output to land.
 
-**Scope of "up and running", stated so it can fail:** a contributor with an
-AWS account can provision a pinned test VM from one YAML file, install a
+**Scope of "up and running", stated so it can fail:** a contributor with a
+hypervisor **or** a cloud account can provision a pinned test VM from one
+YAML file, install a
 target system (cortex, myelin, arc) at an exact git ref, run a graded corpus
 against it with telemetry receipts, destroy everything, and **prove** the
 next VM is identical — where "prove" means an executable comparison, not a
@@ -43,7 +44,7 @@ Everything below was read or executed, not inferred.
 |---|---|---|
 | OpenTofu VM module (ProxMox) | working | `vpzed/opentofu-pve-template@496bb67` — typed `spec` contract, plan-time guards, encrypted state |
 | Ansible layer-2 roles | working, idempotent | `nats_server`, `bun`, `claude`, `docker`, `metafactory_arc` + dynamic inventory `tofu.py` reading `tofu output -json vms` |
-| Environment fingerprint | working, text-only | `scripts/vm-fingerprint.sh` — packages, apt config, units, users, layer-2 trees; per-instance noise deliberately excluded |
+| Environment fingerprint | working, digested (core/provider split, §5b) | `scripts/vm-fingerprint.sh` — packages, apt config, units, users, layer-2 trees; per-instance noise deliberately excluded |
 | otel-lgtm backend | containers up | compose files + two Grafana dashboards |
 | Windmill backend | containers up, **no factory code yet** | `windmill/local-dev/` is bare CLI scaffolding |
 | assay attestation | implemented | `EnvironmentStamp` / `CapturedOnStamp` / `DriftAssessment` (`evals/execution-boundary/lib/environment.ts`) |
@@ -394,13 +395,22 @@ are recorded now, before any run, per the Specification gate.
 ### Phase 0 — Close the loop on the reference implementation
 *Owner: Vincent; two small assists offered from our side.*
 
-- [ ] `metafactory_arc` role: `0.45.0` + `--frozen-lockfile` (two-line PR)
-- [ ] fingerprint script emits `sha256` digest alongside the text
-- [ ] **injection proof recorded**: one pinned package changed → rebuild →
+- [x] `metafactory_arc` role: `0.45.0` + `--frozen-lockfile` (two-line PR)
+- [x] fingerprint script emits `sha256` digests alongside the text — landed
+      as the §5b core/provider split rather than a single digest
+- [x] **injection proof recorded**: one pinned package changed → rebuild →
       non-empty diff and changed digest, observed and committed
 
-**AC-0:** two captures across destroy/recreate are byte-identical (empty
-`git diff`); the injected fault produces a visibly red comparison.
+**AC-0: PASSED**, on hardware, recorded in the reference implementation's
+`evidence/ac-0.md`. Two captures across destroy/recreate were byte-identical
+(empty `git diff`); the injected fault — `nats_server` 2.14.4 → 2.14.5, one
+pinned version, isolated — moved the **core** digest `cecf2948… → b54df67b…`
+while the **provider** digest held at `0b63ff00…`.
+
+That second half is worth more than the box it ticks: it is the first
+evidence *on real hardware* that the core/provider split behaves as §5b
+claims — a package change moves core and leaves provider alone. Until then
+that property had only been asserted against synthetic captures.
 
 ### Phase 1 — `environments/` lands in assay, **and something produces the file**
 - [ ] `environments/README.md` — the contract (declared in git, built to a
@@ -409,7 +419,13 @@ are recorded now, before any run, per the Specification gate.
 - [ ] runner reports match/drift/unpinned per case for the new field
 - [ ] **the producing half exists** — a role that runs the fingerprint,
       extracts the `core`/`provider` digests, and writes
-      `/etc/assay/environment.json` onto the VM
+      `/etc/assay/environment.json` onto the VM. **This is an Ansible role,
+      so it is above the seam**: it goes upstream to
+      `vpzed/opentofu-pve-template` as a PR (DD-11), never into a private
+      copy. Phase 1 therefore spans three homes — the contract in assay, the
+      stamp in assay, the role in the reference implementation — which is
+      worth stating because the delivery list below used to call Phase 1
+      "entirely in this repo".
 
 **The producing half was missing and nearly stayed missing.** The contract
 was written on the consuming side (deliberately, so the instrument does not
@@ -420,11 +436,19 @@ happened: the cortex pin reaching the result while the environment identity
 did not. A contract with only one side implemented is a contract nobody has
 yet.
 
-Checked, so it is not a chicken-and-egg: the fingerprint reads
-`/etc/os-release`, `/etc/localtime`, `/etc/apt/*`, `/etc/ssh/sshd_config.d/*`,
-`/etc/docker/daemon.json` and `/etc/cloud/build.info`, and nothing else under
-`/etc`. Writing `/etc/assay/environment.json` therefore does not perturb the
-digest it carries, and the file can be written after capture.
+Checked, so it is not a chicken-and-egg — but checked more carefully than
+the first draft of this paragraph, which said the capture reads a short list
+of `/etc` files "and nothing else under `/etc`". It reads more than that: it
+also enumerates enabled unit files (which live under `/etc/systemd`) via
+`systemctl list-unit-files --state=enabled`, and reads `/etc/passwd` via
+`getent passwd` — both in the **core** section.
+
+The conclusion survives: a plain file write to `/etc/assay/environment.json`
+is inert, so the file can be written after capture. **The loose wording was
+the hazard**, because it would have licensed implementing the producing half
+as an enabled systemd oneshot or an apt package — either of which moves the
+core digest silently, which is the one failure this document exists to
+prevent. Write the file; do not install a unit or a package to write it.
 
 **AC-1:** a corpus run on a factory VM yields a non-null digest in
 `captured_on`; a run on an unfingerprinted laptop yields `null` **plus a
@@ -451,14 +475,19 @@ reference implementation's for the same definition.
 ### Phase 3 — Target enablement (cortex, myelin)
 - [ ] `metafactory_cortex`, `metafactory_myelin` roles using
       `arc install --pin <ref>`
-- [ ] the inherited six-step smoke loop runs end to end:
-      *provision → substrate → arc → target → smoke test*, stopping at
-      first failure
+- [ ] the inherited smoke loop runs end to end:
+      *provision → substrate → arc → target → smoke test* — five steps;
+      earlier drafts said six — stopping at first failure
 
 **AC-3 (the criterion the whole spec exists for):** the execution-boundary
 corpus runs on a factory VM against a cortex checkout pinned to an exact
-SHA, and the resulting `captured_on.cortex_commit` **equals the SHA the
-inventory file declared**. When that holds, the factory's pin has reached
+SHA, the resulting `captured_on.cortex_commit` **equals the SHA the
+inventory file declared**, **and `captured_on.environment_digest` is
+non-null**. The second half is stated explicitly because without it AC-3
+passes in exactly the half-happened state Phase 1 calls unacceptable — the
+target's pin reaching the result while the environment's identity does not.
+(AC-1 covers the same property from the assay side; naming it here too means
+neither phase can pass by pointing at the other.) When that holds, the factory's pin has reached
 the assay result, and "unpinned baseline: 12 of 12" starts falling.
 
 ### Phase 4 — Orchestration
@@ -552,7 +581,11 @@ and portable, so nothing forces a shared Grafana.*
 
 ## 10. Delivery
 
-Ordered by DD-7, environment before corpus. Phases 0 and 1 are independent
+Ordered by DD-7, environment before corpus — the environment a corpus runs
+on must be green before the corpus is believed, which the reference
+implementation satisfies today (AC-0). DD-7 orders *environment before
+corpus*, not *every provider before any corpus*, so a second provider is not
+a prerequisite for running the corpus on the first. Phases 0 and 1 are independent
 and can run in parallel. **Phase 3 does not depend on Phase 2** — that claim
 was in an earlier draft of this section and was wrong. Phase 3 is Ansible
 roles, an `arc install --pin`, and a corpus run; nothing in it is
@@ -566,18 +599,28 @@ Phase 4 still follows 3.
 1. **Phase 0 assists** — the two-line arc-role PR and the digest+injection
    PR to `vpzed/opentofu-pve-template`, offered upstream (DD-11).
 2. **Phase 1** — `environments/` contract + `environment_digest` in the
-   stamp. Small, entirely in this repo, unblocks the AC-3 criterion.
+   stamp, plus the producing role upstream (DD-11). Unblocks AC-3.
 3. **Phase 3** — cortex/myelin roles + the smoke loop, **on the reference
    implementation**; AC-3 is the exit and needs no hyperscaler account. This
    moved ahead of Phase 2 deliberately: it is reachable now, it is the
    criterion the spec exists for, and it costs its operator nothing.
-4. **Phase 2** — `modules/vm-aws` with reaper-first ordering (DD-13). With
-   Phase 3 already green on ProxMox, this stops being "the second provider"
-   and becomes the **portability proof**: §5b's conformance run asks that a
-   module's core fingerprint digest match *the reference implementation's
-   for the same definition*, which is unaskable until the reference has run
-   the whole loop. Sequenced this way, Phase 2 has something to be
-   conformant to.
+4. **Phase 2** — `modules/vm-aws` with reaper-first ordering (DD-13).
+
+   An earlier draft of this item justified the reorder by claiming §5b's
+   conformance run needs Phase 3 to have happened first. **That was wrong,
+   and wrong in this document's own signature way** — it invented a
+   dependency in the opposite direction to the one it was correcting. The
+   core digest *excludes the software under test by design* (the fingerprint
+   prunes the arc install root; assay's `environments/README.md` states the
+   rule), so Phase 3's output is definitionally invisible to it, and a
+   reference core digest for `inventory/ubuntu-test.yaml` already exists in
+   the reference implementation's `evidence/ac-0.md`. Phase 2 could be run
+   today against that digest.
+
+   The real reason 3 comes first is smaller and does not need dressing up:
+   **Phase 3 is reachable now, on hardware that exists, and it is the exit
+   criterion.** Phase 2 needs an account that does not exist yet. That is
+   the whole argument.
 5. **Phase 4** — Windmill Script/Flow; tests P-2 explicitly.
 6. **Upstream issues raised, not worked around:** arc persisted-pin;
    anything the seam freeze surfaces goes to Vincent's repo as a PR.
