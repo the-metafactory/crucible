@@ -18,7 +18,7 @@ Two planes, one seam (`docs/design-infrastructure-factory.md`):
   rebuild identical via the fingerprint digest.
 - **The seam**: the provider-blind inventory `spec` object and output
   contract. ProxMox VE is the reference implementation
-  (vpzed/opentofu-pve-template); AWS is the second provider. The provider
+  (vpzed-dev/smithy); AWS is the second provider. The provider
   list is not curated here — operators choose and extend (DD-21).
   Agnosticism is achieved at the contract, never via an abstraction layer,
   and is measurable by the provider-invariant core fingerprint digest — two
@@ -40,7 +40,7 @@ Two planes, one seam (`docs/design-infrastructure-factory.md`):
   environment by anything mutable.
 - **Never fork above the seam.** Ansible roles, `tofu.py`, cloud-init
   templates, and the fingerprint script are shared with the reference
-  implementation — improvements go upstream to vpzed/opentofu-pve-template
+  implementation — improvements go upstream to vpzed-dev/smithy
   as PRs, never into a private copy.
 - **A provider module implements every spec field or rejects it loudly at
   plan time.** A silently ignored field is an environment lying about

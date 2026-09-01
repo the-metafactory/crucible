@@ -3,7 +3,7 @@
   environment by anything mutable.
 - **Never fork above the seam.** Ansible roles, `tofu.py`, cloud-init
   templates, and the fingerprint script are shared with the reference
-  implementation — improvements go upstream to vpzed/opentofu-pve-template
+  implementation — improvements go upstream to vpzed-dev/smithy
   as PRs, never into a private copy.
 - **A provider module implements every spec field or rejects it loudly at
   plan time.** A silently ignored field is an environment lying about
