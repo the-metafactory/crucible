@@ -71,3 +71,11 @@ provider seam exists precisely so smithy-on-ProxMox and crucible-on-AWS
 are the *same factory*, measured by the same digest.
 
 The digests are the only thing that travels between the three.
+
+## The meta level
+
+Why three factories at all, and what the digests buy at the ecosystem
+level, is written up in the vision repo:
+[factory-of-factories](https://github.com/the-metafactory/vision/blob/main/factory-of-factories.md)
+— including the worked example where the three factories close into
+one production line at the `cortex@<sha> · env@<digest>` receipt.
