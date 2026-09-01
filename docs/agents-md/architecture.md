@@ -8,7 +8,7 @@ Two planes, one seam (`docs/design-infrastructure-factory.md`):
   rebuild identical via the fingerprint digest.
 - **The seam**: the provider-blind inventory `spec` object and output
   contract. ProxMox VE is the reference implementation
-  (vpzed/opentofu-pve-template); AWS is the second provider. The provider
+  (vpzed-dev/smithy); AWS is the second provider. The provider
   list is not curated here — operators choose and extend (DD-21).
   Agnosticism is achieved at the contract, never via an abstraction layer,
   and is measurable by the provider-invariant core fingerprint digest — two

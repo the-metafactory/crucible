@@ -45,7 +45,7 @@ Two planes, one seam (full spec:
   **prove** the next one is identical.
 - **The seam**: a provider-blind inventory + output contract. ProxMox VE is
   the reference implementation
-  ([vpzed/opentofu-pve-template](https://github.com/vpzed/opentofu-pve-template),
+  ([vpzed-dev/smithy](https://github.com/vpzed-dev/smithy),
   by Vincent Zontini — the work this repo grew from); AWS is the second
   provider — but the provider list is not curated here: whoever runs the
   factory picks what suits them and adds a module if one is missing (DD-21).

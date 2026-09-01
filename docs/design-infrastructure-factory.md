@@ -4,7 +4,7 @@
 **Home:** this repo (crucible) is the infrastructure factory this spec describes; the consuming contract lives in [assay](https://github.com/the-metafactory/assay/blob/main/environments/README.md)
 **Author:** Luna (with Andreas)
 **Contributors whose work this specifies:** Vincent Zontini (the factory itself), Robert Chuvala (the digest criterion), Magnús Smárason (the injection protocol)
-**Refs:** [`assay:docs/design-testing-factory.md`](https://github.com/the-metafactory/assay/blob/main/docs/design-testing-factory.md) (DD-1..DD-10, which this continues) · [`assay:ideas/2026-08-01-environment-tier.md`](https://github.com/the-metafactory/assay/blob/main/ideas/2026-08-01-environment-tier.md) (the tray note this hardens into a spec) · [`assay:CONTEXT.md`](https://github.com/the-metafactory/assay/blob/main/CONTEXT.md) (language — *environment* and *substrate* are used in their canonical senses throughout) · [vpzed/opentofu-pve-template](https://github.com/vpzed/opentofu-pve-template) (the reference implementation)
+**Refs:** [`assay:docs/design-testing-factory.md`](https://github.com/the-metafactory/assay/blob/main/docs/design-testing-factory.md) (DD-1..DD-10, which this continues) · [`assay:ideas/2026-08-01-environment-tier.md`](https://github.com/the-metafactory/assay/blob/main/ideas/2026-08-01-environment-tier.md) (the tray note this hardens into a spec) · [`assay:CONTEXT.md`](https://github.com/the-metafactory/assay/blob/main/CONTEXT.md) (language — *environment* and *substrate* are used in their canonical senses throughout) · [vpzed-dev/smithy](https://github.com/vpzed-dev/smithy) (the reference implementation)
 
 ---
 
@@ -43,7 +43,7 @@ Everything below was read or executed, not inferred.
 
 | Piece | State | Evidence |
 |---|---|---|
-| OpenTofu VM module (ProxMox) | working | `vpzed/opentofu-pve-template@496bb67` — typed `spec` contract, plan-time guards, encrypted state |
+| OpenTofu VM module (ProxMox) | working | `vpzed-dev/smithy@496bb67` — typed `spec` contract, plan-time guards, encrypted state |
 | Ansible layer-2 roles | working, idempotent | `nats_server`, `bun`, `claude`, `docker`, `metafactory_arc` + dynamic inventory `tofu.py` reading `tofu output -json vms` |
 | Environment fingerprint | working, digested (core/provider split, §5b) | `scripts/vm-fingerprint.sh` — packages, apt config, units, users, layer-2 trees; per-instance noise deliberately excluded |
 | otel-lgtm backend | containers up | compose files + two Grafana dashboards |
@@ -572,7 +572,7 @@ that property had only been asserted against synthetic captures.
       extracts the `core`/`provider` digests, and writes
       `/etc/assay/environment.json` onto the VM to assay's schema (§4a).
       **This is an Ansible role, so it is above the seam**: it goes
-      upstream to `vpzed/opentofu-pve-template` as a PR (DD-11), never into
+      upstream to `vpzed-dev/smithy` as a PR (DD-11), never into
       a private copy. Phase 1 therefore spans three homes — the contract in
       assay, the stamp in assay, the role in the reference implementation.
 
@@ -837,7 +837,7 @@ the two are siblings rather than a chain.
 Phase 4 still follows 3.
 
 1. **Phase 0 assists** — the two-line arc-role PR and the digest+injection
-   PR to `vpzed/opentofu-pve-template`, offered upstream (DD-11).
+   PR to `vpzed-dev/smithy`, offered upstream (DD-11).
 2. **Phase 1** — `environments/` contract + `environment_digest` in the
    stamp, plus the producing role upstream (DD-11). Unblocks AC-3.
 3. **Phase 3** — cortex/myelin roles + the smoke loop, **on the reference
@@ -855,11 +855,12 @@ Phase 4 still follows 3.
    fingerprint prunes `.local/share/metafactory` and `.local/state`; assay's
    `environments/README.md` states the rule the exclusion serves), so the
    digest does not move when the target's pin moves — which is the property
-   Phase 2 needs from it. Full target-invisibility is a stronger claim and
-   is not true yet: arc's CLI shims under `.local/bin` are still hashed into
-   core, and the prune that closes that is pending upstream as
-   `vpzed/opentofu-pve-template#6`, tracked here as `crucible#14`.
-   Pin-invariance is enough for the point being made here, and a reference
+   Phase 2 needs from it. Full **target-invisibility** also
+   holds as of the reference implementation's shim-dir prune
+   (`vpzed-dev/smithy#6`, merged 2026-08-23 at `675b98150656`; crucible#14):
+   arc's CLI shims under `.local/bin` are pruned too, so nothing the
+   target installs reaches the core digest. Pin-invariance alone was
+   already enough for the point being made here, and a reference
    core digest for `inventory/ubuntu-test.yaml` already exists in the
    reference implementation's `evidence/ac-0.md`. Phase 2 could be run today
    against that digest.
