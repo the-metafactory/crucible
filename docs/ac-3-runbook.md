@@ -57,6 +57,9 @@ One YAML file per VM in smithy's `inventory/`. The file name is the VM name and
 must be a DNS label. Write `inventory/ac3.yaml`:
 
 ```yaml
+# Pick a vm_id that is free on your node and above the fleet's VMID floor.
+# 501 is an example: `tofu apply` fails at plan time against a VMID already in
+# use, or one belonging to a VM not tagged `opentofu`, rather than touching it.
 vm_id: 501
 description: "AC-3: the execution-boundary corpus on a factory VM"
 
@@ -239,8 +242,14 @@ This clone is deliberately taken **after** `assay_env` has written the
 environment file, and it does not disturb it: `~/assay` is outside the trees
 the capture walks (`~/.local` and `~/.bun`), and `~/.bun/install/cache` — which
 `bun install` does populate — is pruned wholesale from both find passes since
-smithy#27. Check 4 below is what confirms that on your machine; this paragraph
-is the reason to expect it, not the evidence for it.
+smithy#27.
+
+That is the reason to *expect* the clone to be inert, not evidence that it was.
+Check 4 cannot supply the evidence either — it compares the runner's header
+against the same `/etc/assay/environment.json` the header was read from, so it
+closes a loop rather than opening one: if the clone had perturbed a walked
+tree, the file would not have changed and check 4 would still pass. Section 7
+is the step that actually measures it, and it is the one worth doing.
 
 ## 5. Run the corpus
 
@@ -283,7 +292,7 @@ CORPUS INTEGRITY  12/12 behaved as documented   (fail=0 skip=0)
 SECURITY POSTURE  ⚠️  4 finding(s) STILL OPEN — r2-f3, r2-f4, r2-f5, r2-f6
                   those cases PASS *because* the vulnerability still reproduces.
 By documented status: fixed=7  accepted-residual=1  open=4
-ENVIRONMENT DRIFT ⚠️  12 case(s) with an UNPINNED baseline (captured_on never recorded a comparable environment or substrate) — r1-f1, r1-f2, …
+ENVIRONMENT DRIFT ⚠️  12 case(s) with an UNPINNED baseline (captured_on never recorded a comparable environment or substrate) — r1-f1, r1-f2, <snip — all 12 ids, r1-f1 through r2-f6>
 ```
 
 ### Check 1 — `CORPUS INTEGRITY 12/12`, and `skip=0`
@@ -301,7 +310,8 @@ CORPUS INTEGRITY  12/12 behaved as documented   (fail=0 skip=0)
 > it means a wrapper script, a CI job or a human reading `$?` sees a green run
 > in which **nothing was verified at all**.
 >
-> The runner exits non-zero only when `fail > 0`. Skips never affect it.
+> The runner exits non-zero only when `fail > 0` (or `2` on a runner crash).
+> Skips never affect it.
 >
 > **Check `fail=0` AND `skip=0` in the recap line. Not the exit code.**
 > A run reporting `skip=12` has measured nothing. Paste it into a receipt and
@@ -359,6 +369,11 @@ A header digest that does not match the file means assay read a *different*
 file — check `ASSAY_ENVIRONMENT_FILE`, which overrides the path — or that
 something moved the machine between the capture and the run.
 
+Note what this check does **not** establish. Both sides of it come from the
+same file, so it confirms assay read the identity this VM published, and
+nothing about whether that identity is still true of the machine. Section 7 is
+the reading that can disagree.
+
 ### What is expected, and is not a failure
 
 **`SECURITY POSTURE ⚠️ 4 finding(s) STILL OPEN`.** Four of the twelve cases
@@ -375,7 +390,62 @@ epic) and is **out of scope for this runbook**. Twelve is the number that
 starts falling once it happens — which is the whole point of the exercise, and
 the reason this run has to happen first.
 
-## 7. The receipt
+## 7. The backstop: prove the corpus run did not move the machine
+
+Recommended, and the only step here that *measures* what section 4 argued.
+
+Check 4 is a closed loop: it compares the runner's `env@` against the same
+`/etc/assay/environment.json` the runner read it from. Both sides move together
+or not at all, so a clone that perturbed a walked tree would leave the file
+untouched and check 4 green. The open loop is to fingerprint the machine again
+and compare that fresh reading against the frozen one.
+
+You already have the "before" capture: `assay_env` wrote it to the control
+node at `fingerprints/<vm-name>.txt` when it ran in section 3. Keep a copy,
+then re-capture to the same path after the corpus run and diff:
+
+```sh
+cp fingerprints/ac3.txt /tmp/ac3-pre-corpus.txt
+./scripts/vm-fingerprint.sh ubuntu@10.0.0.51 fingerprints/ac3.txt
+diff /tmp/ac3-pre-corpus.txt fingerprints/ac3.txt
+```
+
+Two things to read from that:
+
+- **An empty `diff`** means nothing the capture looks at moved across the assay
+  clone, `bun install` and the corpus run. That is the claim section 4 makes,
+  now measured.
+- **The `core` line in the DIGESTS tail** the script prints on stderr must equal
+  `core_digest` in `/etc/assay/environment.json` — the full digest, not the
+  12-hex short form. That is the fresh reading agreeing with the frozen record.
+
+```text
+fingerprint written to fingerprints/ac3.txt
+##### DIGESTS #####
+core      sha256:47ab86461c26b15a1075e5ea643a287119e67b5e141911d3b3fc970479507a4b
+provider  sha256:61cb3c9398c74f84c2994fc40c5f1c3a817ddbbddbe61e1fdde307820bb3e992
+combined  sha256:21a1b81246b5c9824e6d7554b87198a8041086429802cbee5cf80960c0a765ec
+```
+
+The exact pattern to copy — a capture diffed against a capture, with the moved
+`core` and `combined` lines at the tail as the verdict and `provider` visibly
+holding — is upstream's
+[`evidence/op-20260901-post-pr-27-fingerprint-diff.md`](https://github.com/vpzed-dev/smithy/blob/main/evidence/op-20260901-post-pr-27-fingerprint-diff.md).
+That receipt is the negative case done properly: the diff is non-empty, every
+line that moved is shown, and the digest change is explained by exactly those
+lines and nothing else.
+
+If the diff is **not** empty here, the run is still a valid AC-3 observation —
+the environment file was written before the clone, so the digest it records is
+the digest of the machine the corpus was installed onto. What you have lost is
+the claim that the corpus is inert. Record the diff in the receipt and say so;
+that is a finding about the runbook, not a failed run.
+
+`fingerprints/**` is gitignored upstream: a capture carries the login user's
+`authorized_keys` and sshd drop-ins, so it is the operator's private overlay.
+Quote the DIGESTS lines in the receipt, never the capture body.
+
+## 8. The receipt
 
 Save the run as an operational receipt in whichever repo the runner owns:
 smithy's `evidence/` if Vincent runs it on ProxMox, crucible's `evidence/` if
@@ -408,12 +478,20 @@ metafactory_cortex_pin=<sha>`**; the play recap; `cat
 `ASSAY_CORTEX_REPO_PATH=… bun run eval:execution-boundary` invocation; and the
 runner's full output — header and rollup, uncut.
 
+Then, if you ran section 7, the `diff` of the two captures and the DIGESTS tail
+beneath it. **Including that diff is what upgrades the receipt from argued to
+measured.** Without it the receipt asserts that the corpus run left the machine
+alone on the strength of a prune list read in a comment; with it, the receipt
+shows a reading taken after the fact agreeing with the identity recorded before
+it. Everything else in the receipt is a comparison someone can watch being
+made — this is the one claim that would otherwise be taken on trust.
+
 Then state the four checks against it explicitly, with the full digests and the
 full SHA written out. Post it on
 [crucible#27](https://github.com/the-metafactory/crucible/issues/27) and
 [#24](https://github.com/the-metafactory/crucible/issues/24).
 
-## 8. Failure triage
+## 9. Failure triage
 
 | Symptom | What it means | Where to look |
 |---|---|---|
@@ -445,7 +523,8 @@ recalled. Re-read them at HEAD before a run.
   [`ansible/roles/assay_env/tasks/main.yaml`](https://github.com/vpzed-dev/smithy/blob/main/ansible/roles/assay_env/tasks/main.yaml),
   [`inventory-example.yaml`](https://github.com/vpzed-dev/smithy/blob/main/inventory-example.yaml),
   [`scripts/vm-fingerprint.sh`](https://github.com/vpzed-dev/smithy/blob/main/scripts/vm-fingerprint.sh),
-  [`evidence/op-20260901-post-pr-26-assay_env.md`](https://github.com/vpzed-dev/smithy/blob/main/evidence/op-20260901-post-pr-26-assay_env.md)
+  [`evidence/op-20260901-post-pr-26-assay_env.md`](https://github.com/vpzed-dev/smithy/blob/main/evidence/op-20260901-post-pr-26-assay_env.md),
+  [`evidence/op-20260901-post-pr-27-fingerprint-diff.md`](https://github.com/vpzed-dev/smithy/blob/main/evidence/op-20260901-post-pr-27-fingerprint-diff.md)
 - `the-metafactory/assay` — [`evals/execution-boundary/runner.ts`](https://github.com/the-metafactory/assay/blob/main/evals/execution-boundary/runner.ts),
   [`lib/environment.ts`](https://github.com/the-metafactory/assay/blob/main/evals/execution-boundary/lib/environment.ts),
   [`lib/cortex-repo.ts`](https://github.com/the-metafactory/assay/blob/main/evals/execution-boundary/lib/cortex-repo.ts),
