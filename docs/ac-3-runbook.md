@@ -14,6 +14,14 @@ counterpart to assay's
 that document explains what the seam buys, this one is the sequence of
 commands that exercises it.
 
+> **Performed.** This runbook's first performance was 2026-09-03, on ProxMox,
+> by Vincent —
+> [`vpzed-dev/smithy` `evidence/ac-3.md`](https://github.com/vpzed-dev/smithy/blob/main/evidence/ac-3.md).
+> All four checks green, backstop measured, both AC-3 clauses observed. That
+> run also found this document's first flaw (section 7 relied on a file it
+> never told the operator to check for), fixed in the revision you are
+> reading.
+
 ## The run is an offer, not an assignment
 
 Everything below needs a hypervisor. It is **offered** to whoever has one and
@@ -276,6 +284,20 @@ ASSAY_CORTEX_REPO_PATH=$HOME/.local/share/metafactory/arc/repos/cortex bun run e
 
 ## 6. The four things to check
 
+The short form, for when it is late and the prose below is too much. Every row
+is pass/fail; anything else is a failure — go to section 9.
+
+| # | Look at | Pass when |
+|---|---------|-----------|
+| 1 | rollup line | `12/12 behaved as documented (fail=0 skip=0)` — **both** zeros |
+| 2 | header | `cortex@` + first 12 hex of YOUR pin — no `-dirty`, no other SHA |
+| 3 | header | `env@` + 12 hex — not `none`, not `unreadable` |
+| 4 | `ssh <vm> grep core_digest /etc/assay/environment.json` | file digest starts with check 3's 12 hex |
+| §7 | fresh capture's DIGESTS tail | `core` line equals the file's `core_digest` — full 64 hex |
+
+The `SECURITY POSTURE ⚠️` and `ENVIRONMENT DRIFT ⚠️ 12 UNPINNED` lines are
+**expected** — neither is a failure (explained at the end of this section).
+
 The runner prints a four-line header and a rollup. Three of the four checks are
 in those lines; the fourth is a comparison against the VM.
 
@@ -400,31 +422,39 @@ or not at all, so a clone that perturbed a walked tree would leave the file
 untouched and check 4 green. The open loop is to fingerprint the machine again
 and compare that fresh reading against the frozen one.
 
-You already have the "before" capture: `assay_env` wrote it to the control
-node at `fingerprints/<vm-name>.txt` when it ran in section 3. Keep a copy,
-then re-capture to the same path after the corpus run and diff:
+The "before" reading is already frozen: `assay_env` computed `core_digest`
+from its own capture in section 3 and wrote it into the environment file
+**before** the assay clone existed. So the measurement is one fresh capture,
+compared against the file:
 
 ```sh
-cp fingerprints/ac3.txt /tmp/ac3-pre-corpus.txt
-./scripts/vm-fingerprint.sh ubuntu@10.0.0.51 fingerprints/ac3.txt
-diff /tmp/ac3-pre-corpus.txt fingerprints/ac3.txt
+./scripts/vm-fingerprint.sh ubuntu@10.0.0.51 fingerprints/ac3-post-corpus.txt
+ssh ubuntu@10.0.0.51 grep _digest /etc/assay/environment.json
 ```
 
-Two things to read from that:
-
-- **An empty `diff`** means nothing the capture looks at moved across the assay
-  clone, `bun install` and the corpus run. That is the claim section 4 makes,
-  now measured.
-- **The `core` line in the DIGESTS tail** the script prints on stderr must equal
-  `core_digest` in `/etc/assay/environment.json` — the full digest, not the
-  12-hex short form. That is the fresh reading agreeing with the frozen record.
+**Pass:** the `core` line in the DIGESTS tail equals the file's `core_digest`
+— the **full 64-hex digest**, not the 12-hex short form (`provider` must match
+`provider_digest` the same way). Digest equality IS the claim: nothing the
+capture looks at moved across the assay clone, `bun install` and the corpus
+run.
 
 ```text
-fingerprint written to fingerprints/ac3.txt
+fingerprint written to fingerprints/ac3-post-corpus.txt
 ##### DIGESTS #####
 core      sha256:47ab86461c26b15a1075e5ea643a287119e67b5e141911d3b3fc970479507a4b
 provider  sha256:61cb3c9398c74f84c2994fc40c5f1c3a817ddbbddbe61e1fdde307820bb3e992
 combined  sha256:21a1b81246b5c9824e6d7554b87198a8041086429802cbee5cf80960c0a765ec
+```
+
+**Fail:** the digests differ. Now you want the line-level diff, and for that
+you need the section-3 capture — the role wrote it on the control node at
+`fingerprints/<vm-name>.txt` (the default `assay_env_capture_path`; an
+operator overlay can point it elsewhere, and this runbook's first performance
+found no such file at all — so `ls` it, never assume it):
+
+```sh
+ls -l fingerprints/ac3.txt
+diff fingerprints/ac3.txt fingerprints/ac3-post-corpus.txt
 ```
 
 The exact pattern to copy — a capture diffed against a capture, with the moved
@@ -433,13 +463,16 @@ holding — is upstream's
 [`evidence/op-20260901-post-pr-27-fingerprint-diff.md`](https://github.com/vpzed-dev/smithy/blob/main/evidence/op-20260901-post-pr-27-fingerprint-diff.md).
 That receipt is the negative case done properly: the diff is non-empty, every
 line that moved is shown, and the digest change is explained by exactly those
-lines and nothing else.
+lines and nothing else. If the section-3 capture is gone, the digest
+mismatch still stands as the finding; record it and say the line-level
+diagnosis was not possible.
 
-If the diff is **not** empty here, the run is still a valid AC-3 observation —
+If the digests do **not** match, the run is still a valid AC-3 observation —
 the environment file was written before the clone, so the digest it records is
 the digest of the machine the corpus was installed onto. What you have lost is
-the claim that the corpus is inert. Record the diff in the receipt and say so;
-that is a finding about the runbook, not a failed run.
+the claim that the corpus is inert. Record the mismatch (and the diff, if you
+have it) in the receipt and say so; that is a finding about the runbook, not a
+failed run.
 
 `fingerprints/**` is gitignored upstream: a capture carries the login user's
 `authorized_keys` and sshd drop-ins, so it is the operator's private overlay.
@@ -478,8 +511,9 @@ metafactory_cortex_pin=<sha>`**; the play recap; `cat
 `ASSAY_CORTEX_REPO_PATH=… bun run eval:execution-boundary` invocation; and the
 runner's full output — header and rollup, uncut.
 
-Then, if you ran section 7, the `diff` of the two captures and the DIGESTS tail
-beneath it. **Including that diff is what upgrades the receipt from argued to
+Then, if you ran section 7, the fresh capture's DIGESTS tail beside the `grep`
+of the environment file — and the line-level `diff`, if you took one.
+**Including that comparison is what upgrades the receipt from argued to
 measured.** Without it the receipt asserts that the corpus run left the machine
 alone on the strength of a prune list read in a comment; with it, the receipt
 shows a reading taken after the fact agreeing with the identity recorded before
