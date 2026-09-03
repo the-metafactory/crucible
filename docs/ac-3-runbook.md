@@ -14,8 +14,9 @@ counterpart to assay's
 that document explains what the seam buys, this one is the sequence of
 commands that exercises it.
 
-> **Performed.** This runbook's first performance was 2026-09-03, on ProxMox,
-> by Vincent —
+> **Performed.** This runbook's first performance was 2026-09-03 UTC, on
+> ProxMox, by Vincent (the receipt titles itself 20260902 — operator-local
+> date; the transcript's timestamps are 2026-09-03 UTC) —
 > [`vpzed-dev/smithy` `evidence/ac-3.md`](https://github.com/vpzed-dev/smithy/blob/main/evidence/ac-3.md).
 > All four checks green, backstop measured, both AC-3 clauses observed. That
 > run also found this document's first flaw (section 7 relied on a file it
@@ -285,7 +286,7 @@ ASSAY_CORTEX_REPO_PATH=$HOME/.local/share/metafactory/arc/repos/cortex bun run e
 ## 6. The four things to check
 
 The short form, for when it is late and the prose below is too much. Every row
-is pass/fail; anything else is a failure — go to section 9.
+is pass/fail.
 
 | # | Look at | Pass when |
 |---|---------|-----------|
@@ -293,7 +294,11 @@ is pass/fail; anything else is a failure — go to section 9.
 | 2 | header | `cortex@` + first 12 hex of YOUR pin — no `-dirty`, no other SHA |
 | 3 | header | `env@` + 12 hex — not `none`, not `unreadable` |
 | 4 | `ssh <vm> grep core_digest /etc/assay/environment.json` | file digest starts with check 3's 12 hex |
-| §7 | fresh capture's DIGESTS tail | `core` line equals the file's `core_digest` — full 64 hex |
+| §7 | fresh capture's DIGESTS tail | `core` = file's `core_digest` AND `provider` = `provider_digest` — full 64 hex |
+
+Rows 1–4: anything else is a failure — go to section 9. The §7 row fails
+differently — its fail path is in section 7 itself, and it does not undo the
+AC-3 observation.
 
 The `SECURITY POSTURE ⚠️` and `ENVIRONMENT DRIFT ⚠️ 12 UNPINNED` lines are
 **expected** — neither is a failure (explained at the end of this section).
@@ -424,7 +429,10 @@ and compare that fresh reading against the frozen one.
 
 The "before" reading is already frozen: `assay_env` computed `core_digest`
 from its own capture in section 3 and wrote it into the environment file
-**before** the assay clone existed. So the measurement is one fresh capture,
+**before** the assay clone existed. (The file carries no timestamp, so
+"before" rests on the order you ran things — a playbook re-run after the
+clone re-freezes the baseline and makes this comparison vacuous. Don't re-run
+the play between sections 3 and 7.) So the measurement is one fresh capture,
 compared against the file:
 
 ```sh
@@ -447,8 +455,8 @@ combined  sha256:21a1b81246b5c9824e6d7554b87198a8041086429802cbee5cf80960c0a765e
 ```
 
 **Fail:** the digests differ. Now you want the line-level diff, and for that
-you need the section-3 capture — the role wrote it on the control node at
-`fingerprints/<vm-name>.txt` (the default `assay_env_capture_path`; an
+you need the section-3 capture — the role writes it, by default, on the
+control node at `fingerprints/<vm-name>.txt` (`assay_env_capture_path`; an
 operator overlay can point it elsewhere, and this runbook's first performance
 found no such file at all — so `ls` it, never assume it):
 
