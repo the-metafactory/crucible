@@ -203,6 +203,12 @@ and the failure message says whether the withdrawal was confirmed. Read it: a
 file it could not remove is called out explicitly, and that host is untrusted
 until the file is gone.
 
+Capture the pre-corpus fingerprint:
+
+```sh
+./scripts/vm-fingerprint.sh ubuntu@10.0.0.51 fingerprints/ac3-pre-corpus.txt
+```
+
 Read the file straight off the VM now — you will compare against it in check 4.
 `10.0.0.51` below is an example address; `tofu apply` prints yours as the
 `ssh_command` output for the VM.
@@ -388,6 +394,13 @@ The header's `env@` must be the first 12 hex of `core_digest` in
 `/etc/assay/environment.json` **on that VM**, from step 3. Compare them by eye,
 or:
 
+If you are still logged into the VM:
+
+```sh
+grep core_digest /etc/assay/environment.json
+```
+or from the tofu/ansible host:
+
 ```sh
 ssh ubuntu@10.0.0.51 cat /etc/assay/environment.json | grep core_digest
 ```
@@ -461,8 +474,7 @@ operator overlay can point it elsewhere, and this runbook's first performance
 found no such file at all — so `ls` it, never assume it):
 
 ```sh
-ls -l fingerprints/ac3.txt
-diff fingerprints/ac3.txt fingerprints/ac3-post-corpus.txt
+diff fingerprints/ac3-pre-corpus.txt fingerprints/ac3-post-corpus.txt
 ```
 
 The exact pattern to copy — a capture diffed against a capture, with the moved
